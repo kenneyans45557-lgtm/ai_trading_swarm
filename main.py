@@ -28,7 +28,8 @@ def send_email(subject, body):
 def get_market_news():
     """Holt die aktuellsten weltweiten Wirtschafts- und Forex-Nachrichten"""
     print("🤖 AGENT_INSIDER startet News-Scraping...")
-    url = f"https://newsapi.org{NEWS_API_KEY}"
+        url = f"https://newsapi.org{NEWS_API_KEY}"
+
     try:
         response = requests.get(url).json()
         articles = response.get("articles", [])
@@ -40,7 +41,8 @@ def get_market_news():
 
 def analyze_sentiment_with_ki(headline):
     """Nutzt das kostenlose FinBERT-Modell auf Hugging Face zur Stimmungsanalyse"""
-    api_url = "https://huggingface.co"
+        api_url = "https://huggingface.co"
+
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     try:
         response = requests.post(api_url, headers=headers, json={"inputs": headline}).json()
