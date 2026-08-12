@@ -52,16 +52,16 @@ jobs:
                   print(f"-> Fehler beim E-Mail-Versand: {e}")
 
           def get_market_news():
-              print("🤖 AGENT_INSIDER startet News-Scraping über Yahoo Finance...")
-              url = "https://yahoo.com"
+              print("🤖 AGENT_INSIDER startet spezialisiertes Forex-News-Scraping...")
+              # Konzentriert sich rein auf den Devisenmarkt (EUR, USD, GBP, JPY):
+              url = "https://google.com"
               try:
                   response = requests.get(url, timeout=10)
                   headlines = re.findall(r"<title>(.*?)</title>", response.text)
-                  # Filtert unbrauchbare Titel heraus
-                  clean_headlines = [h for h in headlines if h and not h.startswith("Yahoo Finance") and "RSS" not in h]
+                  clean_headlines = [h for h in headlines if h and "Google News" not in h]
                   return clean_headlines[:5]
               except Exception as e:
-                  print(f"Fehler beim News holen: {e}")
+                  print(f"Fehler beim Forex-News holen: {e}")
                   return []
 
           def analyze_sentiment_with_ki(headline):
@@ -72,7 +72,6 @@ jobs:
                   if isinstance(response, dict) and "estimated_time" in response:
                       return "neutral", 0.0
                   if isinstance(response, list) and len(response) > 0:
-                      # Manchmal liefert Hugging Face geschachtelte Listen zurück
                       data = response[0] if isinstance(response[0], list) else response
                       best_pick = max(data, key=lambda x: x['score'])
                       return best_pick['label'], best_pick['score']
@@ -86,7 +85,7 @@ jobs:
           if not headlines:
               print("🤖 AGENT_INSIDER: Keine aktuellen Nachrichten gefunden. Meeting vertagt.")
           else:
-              print(f"🔎 AGENT_INSIDER: Ich habe {len(headlines)} globale Schlagzeilen analysiert:")
+              print(f"🔎 AGENT_INSIDER: Ich habe {len(headlines)} globale Forex-Schlagzeilen analysiert:")
               total_score, pos_count, neg_count = 0, 0, 0
               for idx, title in enumerate(headlines, 1):
                   label, score = analyze_sentiment_with_ki(title)
@@ -102,15 +101,15 @@ jobs:
               print(f"   Positive: {pos_count} | Negative: {neg_count} | Sentiment-Trend: {total_score:.2f}")
               print("\n🤖 AGENT_ORCHESTRATOR (CEO): Treffe finale Entscheidung...")
               if total_score > 0.3:
-                  txt = f"STARKE BULLISCHE STIMMUNG AM MARKT DETEKTIERT!\nTrend-Score: {total_score:.2f}."
+                  txt = f"STARKE BULLISCHE STIMMUNG AM FOREX-MARKT DETEKTIERT!\nTrend-Score: {total_score:.2f}."
                   print(f"-> ENTSCHEIDUNG: {txt}")
-                  send_email("🚀 KI-SCHWARM: Bullisches Markt-Signal!", txt)
+                  send_email("🚀 KI-SCHWARM: Bullisches Forex-Signal!", txt)
               elif total_score < -0.3:
-                  txt = f"STARK BÄRISCHE PANIK AM MARKT DETEKTIERT!\nTrend-Score: {total_score:.2f}."
+                  txt = f"STARK BÄRISCHE PANIK AM FOREX-MARKT DETEKTIERT!\nTrend-Score: {total_score:.2f}."
                   print(f"-> ENTSCHEIDUNG: {txt}")
-                  send_email("⚠️ KI-SCHWARM: Bärisches Markt-Signal!", txt)
+                  send_email("⚠️ KI-SCHWARM: Bärisches Forex-Signal!", txt)
               else:
-                  print("-> ENTSCHEIDUNG: Marktstimmung neutral. Kein Trade freigegeben.")
+                  print("-> ENTSCHEIDUNG: Forex-Marktstimmung ist neutral. Kein Trade freigegeben.")
           print("=== MEETING BEENDET ===")
           EOF
           python inline_script.py
