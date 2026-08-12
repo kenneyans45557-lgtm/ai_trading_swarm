@@ -73,12 +73,16 @@ jobs:
 
           def get_historical_data(pair):
               try:
-                  url = f"https://yahoo.com{pair}=X?interval=15m&range=2d"
-                  # VERBESSERT: Tarn-Header gegen Cloud-Sperren aktiv
+                  # REPARIERT: Richtige Strukturierung der Yahoo Finance API-URL
+                  url = f"https://yahoo.com{pair}=X"
+                  params = {
+                      'interval': '15m',
+                      'range': '2d'
+                  }
                   headers = {
                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                   }
-                  res = requests.get(url, headers=headers, timeout=10).json()
+                  res = requests.get(url, params=params, headers=headers, timeout=10).json()
                   candles = res['chart']['result'][0]
                   timestamps = candles['timestamp']
                   quotes = candles['indicators']['quote'][0]
