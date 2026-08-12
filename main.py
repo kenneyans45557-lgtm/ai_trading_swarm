@@ -28,8 +28,7 @@ def send_email(subject, body):
 def get_market_news():
     """Holt die aktuellsten weltweiten Wirtschafts- und Forex-Nachrichten"""
     print("🤖 AGENT_INSIDER startet News-Scraping...")
-        url = f"https://newsapi.org{NEWS_API_KEY}"
-
+    url = f"https://newsapi.org{NEWS_API_KEY}"
     try:
         response = requests.get(url).json()
         articles = response.get("articles", [])
@@ -41,8 +40,7 @@ def get_market_news():
 
 def analyze_sentiment_with_ki(headline):
     """Nutzt das kostenlose FinBERT-Modell auf Hugging Face zur Stimmungsanalyse"""
-        api_url = "https://huggingface.co"
-
+    api_url = "https://huggingface.co"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     try:
         response = requests.post(api_url, headers=headers, json={"inputs": headline}).json()
@@ -51,16 +49,12 @@ def analyze_sentiment_with_ki(headline):
         if isinstance(response, dict) and "estimated_time" in response:
             return "neutral", 0.0
         
-        # Wenn die Antwort eine Liste mit Listen ist, flachklopfen
-        if isinstance(response, list) and len(response) > 0 and isinstance(response[0], list):
-            predictions = response[0]
-        elif isinstance(response, list):
-            predictions = response
-        else:
-            return "neutral", 0.0
-            
-        best_pick = max(predictions, key=lambda x: x['score'])
-        return best_pick['label'], best_pick['score']
+        # Vorhersage auswerten
+        if isinstance(response, list) and len(response) > 0:
+            predictions = response[0] if isinstance(response[0], list) else response
+            best_pick = max(predictions, key=lambda x: x['score'])
+            return best_pick['label'], best_pick['score']
+        return "neutral", 0.0
     except Exception:
         return "neutral", 0.0
 
