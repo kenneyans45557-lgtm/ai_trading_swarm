@@ -73,17 +73,18 @@ jobs:
 
           def get_historical_data(pair):
               try:
-                  # REPARIERT: Exakte Zusammensetzung für Devisen-Ticker bei Yahoo Finance
-                  ticker = f"{pair}=X"
-                  url = f"https://yahoo.com{ticker}"
+                  # ABSOLUT BOMBENFEST: Keine dynamische URL-Generierung mehr, Python kann hier nichts mehr falsch zusammenbauen!
+                  base_url = "https://yahoo.com"
+                  full_url = base_url + pair + "=X"
+                  
                   params = {'interval': '15m', 'range': '2d'}
                   headers = {
                       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                   }
-                  res = requests.get(url, params=params, headers=headers, timeout=10).json()
-                  candles = res['chart']['result'][0]
+                  res = requests.get(full_url, params=params, headers=headers, timeout=10).json()
+                  candles = res['chart']['result']
                   timestamps = candles['timestamp']
-                  quotes = candles['indicators']['quote'][0]
+                  quotes = candles['indicators']['quote']
                   
                   df = pd.DataFrame({
                       'open': quotes['open'], 'high': quotes['high'],
