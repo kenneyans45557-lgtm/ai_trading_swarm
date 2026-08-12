@@ -17,10 +17,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: KI- & SMC-Pakete installieren
+      - name: KI- & Finanz-Pakete installieren
         run: |
           python -m pip install --upgrade pip
-          pip install requests pandas numpy
+          pip install requests pandas numpy yfinance
 
       - name: KI-Schwarm Meeting ausführen
         env:
@@ -33,6 +33,7 @@ jobs:
           import os, requests, smtplib, re
           import pandas as pd
           import numpy as np
+          import yfinance as yf
           from email.mime.text import MIMEText
 
           HF_TOKEN = os.getenv("HF_TOKEN")
@@ -40,13 +41,13 @@ jobs:
           EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
           EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 
-          # 20 weltweite Forex-Paare mit präziser Pip-Definition
+          # 20 Forex-Paare mit korrekten Yahoo-TICKERN und Pip-Definitionen
           FOREX_PAIRS = {
-              "EURUSD": 0.0001, "GBPUSD": 0.0001, "USDJPY": 0.01, "AUDUSD": 0.0001,
-              "USDCAD": 0.0001, "USDCHF": 0.0001, "NZDUSD": 0.0001, "EURGBP": 0.0001,
-              "EURJPY": 0.01, "GBPJPY": 0.01, "EURCHF": 0.0001, "EURAUD": 0.0001,
-              "EURCAD": 0.0001, "GBPAUD": 0.0001, "GBPCAD": 0.0001, "AUDJPY": 0.01,
-              "CADJPY": 0.01, "CHFJPY": 0.01, "AUDCAD": 0.0001, "AUDNZD": 0.0001
+              "EURUSD=X": 0.0001, "GBPUSD=X": 0.0001, "USDJPY=X": 0.01, "AUDUSD=X": 0.0001,
+              "USDCAD=X": 0.0001, "USDCHF=X": 0.0001, "NZDUSD=X": 0.0001, "EURGBP=X": 0.0001,
+              "EURJPY=X": 0.01, "GBPJPY=X": 0.01, "EURCHF=X": 0.0001, "EURAUD=X": 0.0001,
+              "EURCAD=X": 0.0001, "GBPAUD=X": 0.0001, "GBPCAD=X": 0.0001, "AUDJPY=X": 0.01,
+              "CADJPY=X": 0.01, "CHFJPY=X": 0.01, "AUDCAD=X": 0.0001, "AUDNZD=X": 0.0001
           }
 
           def send_email(subject, body):
@@ -63,8 +64,10 @@ jobs:
                   print(f"-> Fehler beim E-Mail-Versand: {e}")
 
           def get_market_news(pair):
-              search = f"{pair[:3]}+{pair[3:]}"
-              url = f"https://google.com{search}+forex+currency&hl=en-US&gl=US&ceid=US:en"
+              # Bereinigt den Ticker für die Google Suche (z.B. EURUSD)
+              clean_pair = pair.replace("=X", "")
+              search = f"{clean_pair[:3]}+{clean_pair[3:]}"
+              url = f"https://google.com{search}+forex&hl=en-US&gl=US&ceid=US:en"
               try:
                   response = requests.get(url, timeout=10)
                   headlines = re.findall(r"<title>(.*?)</title>", response.text)
@@ -73,24 +76,14 @@ jobs:
 
           def get_historical_data(pair):
               try:
-                  # ABSOLUT BOMBENFEST: Keine dynamische URL-Generierung mehr, Python kann hier nichts mehr falsch zusammenbauen!
-                  base_url = "https://yahoo.com"
-                  full_url = base_url + pair + "=X"
+                  # UMGEWANDELT: Nutzt jetzt die offizielle yfinance Bibliothek statt roher URLs!
+                  ticker = yf.Ticker(pair)
+                  df = ticker.history(interval="15m", period="2d")
+                  if df.empty:
+                      return None
                   
-                  params = {'interval': '15m', 'range': '2d'}
-                  headers = {
-                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                  }
-                  res = requests.get(full_url, params=params, headers=headers, timeout=10).json()
-                  candles = res['chart']['result']
-                  timestamps = candles['timestamp']
-                  quotes = candles['indicators']['quote']
-                  
-                  df = pd.DataFrame({
-                      'open': quotes['open'], 'high': quotes['high'],
-                      'low': quotes['low'], 'close': quotes['close']
-                  })
-                  df.dropna(inplace=True)
+                  # Spaltennamen in Kleinbuchstaben vereinheitlichen
+                  df.columns = [c.lower() for c in df.columns]
                   return df.tail(60).reset_index(drop=True)
               except Exception as e: 
                   print(f"   ⚠️ Fehler beim Laden der Chartdaten für {pair}: {e}")
@@ -108,7 +101,7 @@ jobs:
               highest_high_20 = lookback_df['high'].max()
               lowest_low_20 = lookback_df['low'].min()
               
-              # 1. LONG TRIGGER: Liquidity Sweep + Bullish FVG/OB
+              # 1. LONG TRIGGER: Liquidity Sweep
               if current_low < lowest_low_20 and current_close > lowest_low_20:
                   if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
                       for i in range(last_idx-1, 0, -1):
@@ -116,7 +109,7 @@ jobs:
                               ob_zone = df.loc[i, 'low']
                               return "BRUTAL_SMC_LONG", ob_zone, current_close
               
-              # 2. SHORT TRIGGER: Liquidity Sweep + Bearish FVG/OB
+              # 2. SHORT TRIGGER: Liquidity Sweep
               if current_high > highest_high_20 and current_close < highest_high_20:
                   if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
                       for i in range(last_idx-1, 0, -1):
@@ -141,7 +134,9 @@ jobs:
           print("🤖 AGENT_ORCHESTRATOR (CEO): Initiiere brutale SMC Markt-Rasterung.")
           
           for pair, pip_val in FOREX_PAIRS.items():
-              print(f"\n🔄 Scanne: {pair[:3]}/{pair[3:]}")
+              clean_name = pair.replace("=X", "")
+              print(f"\n🔄 Scanne: {clean_name[:3]}/{clean_name[3:]}")
+              
               df = get_historical_data(pair)
               if df is None:
                   continue
@@ -152,7 +147,7 @@ jobs:
                   print(f"   📊 AGENT_QUANT: Keine institutionelle SMC-Struktur aktiv. Standby.")
                   continue
                   
-              print(f"🚨 BRUTALES SETUP DETEKTIERT BEI: {pair[:3]}/{pair[3:]} 🚨")
+              print(f"🚨 BRUTALES SETUP DETEKTIERT BEI: {clean_name[:3]}/{clean_name[3:]} 🚨")
               print(f"   📊 AGENT_QUANT: Liquidität abgefischt! Order-Block bei {ob_level:.5f}")
               
               headlines = get_market_news(pair)
@@ -170,14 +165,14 @@ jobs:
                   fmt = ".3f" if "JPY" in pair else ".5f"
                   
                   txt = f"🐋 INSTI-ALARM: BRUTALES SMC-SETUP (LONG)!\n\n" \
-                        f"• Währungspaar: {pair[:3]}/{pair[3:]}\n" \
+                        f"• Währungspaar: {clean_name[:3]}/{clean_name[3:]}\n" \
                         f"• Methode: Liquidity Sweep + FVG Rejection\n\n" \
                         f"🎯 ENTRY (Sofort): {live_price:{fmt}}\n" \
                         f"🛑 STOP-LOSS (SL): {sl:{fmt}} (Abgesichert unter dem Jagd-Tief)\n" \
                         f"🏁 TAKE-PROFIT (TP): {tp:{fmt}} (Ziel nächste Liquiditätszone)\n\n" \
                         f"Meldung: Smart Money hat die Kleinanleger rausgespült. Der Weg nach oben ist frei!"
                   print(f"   -> CEO: Signal freigegeben!")
-                  send_email(f"🐋 SMC-MONSTER: {pair[:3]}/{pair[3:]} LONG!", txt)
+                  send_email(f"🐋 SMC-MONSTER: {clean_name[:3]}/{clean_name[3:]} LONG!", txt)
                   
               elif smc_trend == "BRUTAL_SMC_SHORT" and total_score <= 0.2:
                   sl = ob_level + (8 * pip_val)
@@ -185,14 +180,14 @@ jobs:
                   fmt = ".3f" if "JPY" in pair else ".5f"
                   
                   txt = f"🐋 INSTI-ALARM: BRUTALES SMC-SETUP (SHORT)!\n\n" \
-                        f"• Währungspaar: {pair[:3]}/{pair[3:]}\n" \
+                        f"• Währungspaar: {clean_name[:3]}/{clean_name[3:]}\n" \
                         f"• Methode: Stop-Hunt über altem Hoch + FVG Entry\n\n" \
                         f"🎯 ENTRY (Sofort): {live_price:{fmt}}\n" \
                         f"🛑 STOP-LOSS (SL): {sl:{fmt}} (Abgesichert über dem Jagd-Hoch)\n" \
                         f"🏁 TAKE-PROFIT (TP): {tp:{fmt}}\n\n" \
                         f"Meldung: Institutioneller Short-Abverkauf nach Liquiditätsjagd gestartet!"
                   print(f"   -> CEO: Signal freigegeben!")
-                  send_email(f"🐋 SMC-MONSTER: {pair[:3]}/{pair[3:]} SHORT!", txt)
+                  send_email(f"🐋 SMC-MONSTER: {clean_name[:3]}/{clean_name[3:]} SHORT!", txt)
                   
           print("\n=== GLOBALER MARKT-SCAN BEENDET. SCHWARM IM STANDBY. ===")
           EOF
