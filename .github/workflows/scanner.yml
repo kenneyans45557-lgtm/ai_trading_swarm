@@ -74,7 +74,10 @@ jobs:
           def get_historical_data(pair):
               try:
                   url = f"https://yahoo.com{pair}=X?interval=15m&range=2d"
-                  headers = {'User-Agent': 'Mozilla/5.0'}
+                  # VERBESSERT: Tarn-Header gegen Cloud-Sperren aktiv
+                  headers = {
+                      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                  }
                   res = requests.get(url, headers=headers, timeout=10).json()
                   candles = res['chart']['result'][0]
                   timestamps = candles['timestamp']
@@ -86,7 +89,9 @@ jobs:
                   })
                   df.dropna(inplace=True)
                   return df.tail(60).reset_index(drop=True)
-              except Exception: return None
+              except Exception as e: 
+                  print(f"   ⚠️ Fehler beim Laden der Chartdaten für {pair}: {e}")
+                  return None
 
           def analyze_brutal_smc(df):
               if df is None or len(df) < 25: return "neutral", 0.0, 0.0
@@ -133,14 +138,19 @@ jobs:
           print("🤖 AGENT_ORCHESTRATOR (CEO): Initiiere brutale SMC Markt-Rasterung.")
           
           for pair, pip_val in FOREX_PAIRS.items():
+              print(f"\n🔄 Scanne: {pair[:3]}/{pair[3:]}")
               df = get_historical_data(pair)
+              if df is None:
+                  continue
+                  
               smc_trend, ob_level, live_price = analyze_brutal_smc(df)
               
               if smc_trend == "neutral":
+                  print(f"   📊 AGENT_QUANT: Keine institutionelle SMC-Struktur aktiv. Standby.")
                   continue
                   
-              print(f"\n🚨 BRUTALES SETUP DETEKTIERT BEI: {pair[:3]}/{pair[3:]} 🚨")
-              print(f"   📊 AGENT_QUANT: Liquidität erfolgreich abgefischt! Institutioneller Order-Block lokalisiert bei {ob_level:.5f}")
+              print(f"🚨 BRUTALES SETUP DETEKTIERT BEI: {pair[:3]}/{pair[3:]} 🚨")
+              print(f"   📊 AGENT_QUANT: Liquidität abgefischt! Order-Block bei {ob_level:.5f}")
               
               headlines = get_market_news(pair)
               total_score = 0
@@ -160,9 +170,9 @@ jobs:
                         f"• Währungspaar: {pair[:3]}/{pair[3:]}\n" \
                         f"• Methode: Liquidity Sweep + FVG Rejection\n\n" \
                         f"🎯 ENTRY (Sofort): {live_price:{fmt}}\n" \
-                        f"🛑 STOP-LOSS (SL): {sl:{fmt}} (Perfekt abgesichert unter dem Jagd-Tief)\n" \
+                        f"🛑 STOP-LOSS (SL): {sl:{fmt}} (Abgesichert unter dem Jagd-Tief)\n" \
                         f"🏁 TAKE-PROFIT (TP): {tp:{fmt}} (Ziel nächste Liquiditätszone)\n\n" \
-                        f"Meldung: Die KIs bestätigen, dass das Smart Money die Kleinanleger rausgespült hat. Der Weg nach oben ist frei!"
+                        f"Meldung: Smart Money hat die Kleinanleger rausgespült. Der Weg nach oben ist frei!"
                   print(f"   -> CEO: Signal freigegeben!")
                   send_email(f"🐋 SMC-MONSTER: {pair[:3]}/{pair[3:]} LONG!", txt)
                   
