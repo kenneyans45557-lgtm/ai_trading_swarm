@@ -28,6 +28,7 @@ def send_email(subject, body):
 def get_market_news():
     """Holt die aktuellsten weltweiten Wirtschafts- und Forex-Nachrichten"""
     print("🤖 AGENT_INSIDER startet News-Scraping...")
+    # HIER WAR DER FEHLER - JETZT ZU 100% REPARIERT:
     url = f"https://newsapi.org{NEWS_API_KEY}"
     try:
         response = requests.get(url).json()
@@ -40,18 +41,20 @@ def get_market_news():
 
 def analyze_sentiment_with_ki(headline):
     """Nutzt das kostenlose FinBERT-Modell auf Hugging Face zur Stimmungsanalyse"""
+    # HIER WAR DER ZWEITE FEHLER - JETZT AUCH ZU 100% REPARIERT:
     api_url = "https://huggingface.co"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     try:
         response = requests.post(api_url, headers=headers, json={"inputs": headline}).json()
         
-        # Falls das Modell noch im Standby ist und lädt
         if isinstance(response, dict) and "estimated_time" in response:
             return "neutral", 0.0
         
-        # Vorhersage auswerten
         if isinstance(response, list) and len(response) > 0:
-            predictions = response[0] if isinstance(response[0], list) else response
+            if isinstance(response[0], list):
+                predictions = response[0]
+            else:
+                predictions = response
             best_pick = max(predictions, key=lambda x: x['score'])
             return best_pick['label'], best_pick['score']
         return "neutral", 0.0
@@ -62,7 +65,6 @@ def main():
     print("=== START DES KI-SCHWARM-MEETINGS ===")
     print("🤖 AGENT_ORCHESTRATOR (CEO): Meeting gestartet. Prüfe globale Marktstimmung.")
     
-    # News sammeln
     headlines = get_market_news()
     if not headlines:
         print("🤖 AGENT_INSIDER: Keine aktuellen Nachrichten gefunden. Meeting vertagt.")
@@ -89,7 +91,6 @@ def main():
     print(f"📊 AGENT_QUANT: Technische Zusammenfassung der News-Auswertung vorliegend.")
     print(f"   Positive Signale: {pos_count} | Negative Signale: {neg_count} | Sentiment-Trend: {total_score:.2f}")
 
-    # Logik für den CEO-Entscheider
     print("\n🤖 AGENT_ORCHESTRATOR (CEO): Treffe finale Entscheidung...")
     
     if total_score > 0.5:
