@@ -17,10 +17,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: KI-Pakete installieren
+      - name: KI- & SMC-Pakete installieren
         run: |
           python -m pip install --upgrade pip
-          pip install requests
+          pip install requests pandas numpy
 
       - name: KI-Schwarm Meeting ausführen
         env:
@@ -31,12 +31,23 @@ jobs:
         run: |
           cat << 'EOF' > inline_script.py
           import os, requests, smtplib, re
+          import pandas as pd
+          import numpy as np
           from email.mime.text import MIMEText
 
           HF_TOKEN = os.getenv("HF_TOKEN")
           EMAIL_SENDER = os.getenv("EMAIL_SENDER")
           EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
           EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
+
+          # 20 weltweite Forex-Paare mit präziser Pip-Definition
+          FOREX_PAIRS = {
+              "EURUSD": 0.0001, "GBPUSD": 0.0001, "USDJPY": 0.01, "AUDUSD": 0.0001,
+              "USDCAD": 0.0001, "USDCHF": 0.0001, "NZDUSD": 0.0001, "EURGBP": 0.0001,
+              "EURJPY": 0.01, "GBPJPY": 0.01, "EURCHF": 0.0001, "EURAUD": 0.0001,
+              "EURCAD": 0.0001, "GBPAUD": 0.0001, "GBPCAD": 0.0001, "AUDJPY": 0.01,
+              "CADJPY": 0.01, "CHFJPY": 0.01, "AUDCAD": 0.0001, "AUDNZD": 0.0001
+          }
 
           def send_email(subject, body):
               try:
@@ -47,69 +58,129 @@ jobs:
                   with smtplib.SMTP_SSL('://gmail.com', 465) as server:
                       server.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
                       server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-                  print("-> Info: E-Mail-Update erfolgreich gesendet!")
+                  print("-> Info: Brutales SMC-Signal erfolgreich gesendet!")
               except Exception as e:
                   print(f"-> Fehler beim E-Mail-Versand: {e}")
 
-          def get_market_news():
-              print("🤖 AGENT_INSIDER startet spezialisiertes Forex-News-Scraping...")
-              # Konzentriert sich rein auf den Devisenmarkt (EUR, USD, GBP, JPY):
-              url = "https://google.com"
+          def get_market_news(pair):
+              search = f"{pair[:3]}+{pair[3:]}"
+              url = f"https://google.com{search}+forex+currency&hl=en-US&gl=US&ceid=US:en"
               try:
                   response = requests.get(url, timeout=10)
                   headlines = re.findall(r"<title>(.*?)</title>", response.text)
-                  clean_headlines = [h for h in headlines if h and "Google News" not in h]
-                  return clean_headlines[:5]
-              except Exception as e:
-                  print(f"Fehler beim Forex-News holen: {e}")
-                  return []
+                  return [h for h in headlines if h and "Google News" not in h][:3]
+              except Exception: return []
+
+          def get_historical_data(pair):
+              try:
+                  url = f"https://yahoo.com{pair}=X?interval=15m&range=2d"
+                  headers = {'User-Agent': 'Mozilla/5.0'}
+                  res = requests.get(url, headers=headers, timeout=10).json()
+                  candles = res['chart']['result'][0]
+                  timestamps = candles['timestamp']
+                  quotes = candles['indicators']['quote'][0]
+                  
+                  df = pd.DataFrame({
+                      'open': quotes['open'], 'high': quotes['high'],
+                      'low': quotes['low'], 'close': quotes['close']
+                  })
+                  df.dropna(inplace=True)
+                  return df.tail(60).reset_index(drop=True)
+              except Exception: return None
+
+          def analyze_brutal_smc(df):
+              if df is None or len(df) < 25: return "neutral", 0.0, 0.0
+              
+              last_idx = len(df) - 1
+              current_close = df.loc[last_idx, 'close']
+              current_low = df.loc[last_idx, 'low']
+              current_high = df.loc[last_idx, 'high']
+              
+              lookback_df = df.iloc[last_idx-21 : last_idx-1]
+              highest_high_20 = lookback_df['high'].max()
+              lowest_low_20 = lookback_df['low'].min()
+              
+              # 1. LONG TRIGGER: Liquidity Sweep + Bullish FVG/OB
+              if current_low < lowest_low_20 and current_close > lowest_low_20:
+                  if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
+                      for i in range(last_idx-1, 0, -1):
+                          if df.loc[i, 'close'] < df.loc[i, 'open']:
+                              ob_zone = df.loc[i, 'low']
+                              return "BRUTAL_SMC_LONG", ob_zone, current_close
+              
+              # 2. SHORT TRIGGER: Liquidity Sweep + Bearish FVG/OB
+              if current_high > highest_high_20 and current_close < highest_high_20:
+                  if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
+                      for i in range(last_idx-1, 0, -1):
+                          if df.loc[i, 'close'] > df.loc[i, 'open']:
+                              ob_zone = df.loc[i, 'high']
+                              return "BRUTAL_SMC_SHORT", ob_zone, current_close
+                              
+              return "neutral", 0.0, current_close
 
           def analyze_sentiment_with_ki(headline):
               api_url = "https://huggingface.co"
               headers = {"Authorization": f"Bearer {HF_TOKEN}"}
               try:
                   response = requests.post(api_url, headers=headers, json={"inputs": headline}, timeout=15).json()
-                  if isinstance(response, dict) and "estimated_time" in response:
-                      return "neutral", 0.0
                   if isinstance(response, list) and len(response) > 0:
-                      data = response[0] if isinstance(response[0], list) else response
-                      best_pick = max(data, key=lambda x: x['score'])
+                      best_pick = max(response, key=lambda x: x['score'])
                       return best_pick['label'], best_pick['score']
                   return "neutral", 0.0
-              except Exception:
-                  return "neutral", 0.0
+              except Exception: return "neutral", 0.0
 
-          print("=== START DES KI-SCHWARM-MEETINGS ===")
-          print("🤖 AGENT_ORCHESTRATOR (CEO): Meeting gestartet. Prüfe globale Marktstimmung.")
-          headlines = get_market_news()
-          if not headlines:
-              print("🤖 AGENT_INSIDER: Keine aktuellen Nachrichten gefunden. Meeting vertagt.")
-          else:
-              print(f"🔎 AGENT_INSIDER: Ich habe {len(headlines)} globale Forex-Schlagzeilen analysiert:")
-              total_score, pos_count, neg_count = 0, 0, 0
-              for idx, title in enumerate(headlines, 1):
+          print("=== START DES AUTONOMEN HIGH-END SMC-SCHWARM SCANNERs ===")
+          print("🤖 AGENT_ORCHESTRATOR (CEO): Initiiere brutale SMC Markt-Rasterung.")
+          
+          for pair, pip_val in FOREX_PAIRS.items():
+              df = get_historical_data(pair)
+              smc_trend, ob_level, live_price = analyze_brutal_smc(df)
+              
+              if smc_trend == "neutral":
+                  continue
+                  
+              print(f"\n🚨 BRUTALES SETUP DETEKTIERT BEI: {pair[:3]}/{pair[3:]} 🚨")
+              print(f"   📊 AGENT_QUANT: Liquidität erfolgreich abgefischt! Institutioneller Order-Block lokalisiert bei {ob_level:.5f}")
+              
+              headlines = get_market_news(pair)
+              total_score = 0
+              for title in headlines:
                   label, score = analyze_sentiment_with_ki(title)
-                  print(f"   Headline {idx}: '{title[:60]}...' -> KI-Wertung: {label.upper()} ({score:.2f})")
-                  if label == "positive":
-                      total_score += score
-                      pos_count += 1
-                  elif label == "negative":
-                      total_score -= score
-                      neg_count += 1
-              print("\n--- DISKUSSION & AUSWERTUNG ---")
-              print(f"📊 AGENT_QUANT: Technische Zusammenfassung vorliegend.")
-              print(f"   Positive: {pos_count} | Negative: {neg_count} | Sentiment-Trend: {total_score:.2f}")
-              print("\n🤖 AGENT_ORCHESTRATOR (CEO): Treffe finale Entscheidung...")
-              if total_score > 0.3:
-                  txt = f"STARKE BULLISCHE STIMMUNG AM FOREX-MARKT DETEKTIERT!\nTrend-Score: {total_score:.2f}."
-                  print(f"-> ENTSCHEIDUNG: {txt}")
-                  send_email("🚀 KI-SCHWARM: Bullisches Forex-Signal!", txt)
-              elif total_score < -0.3:
-                  txt = f"STARK BÄRISCHE PANIK AM FOREX-MARKT DETEKTIERT!\nTrend-Score: {total_score:.2f}."
-                  print(f"-> ENTSCHEIDUNG: {txt}")
-                  send_email("⚠️ KI-SCHWARM: Bärisches Forex-Signal!", txt)
-              else:
-                  print("-> ENTSCHEIDUNG: Forex-Marktstimmung ist neutral. Kein Trade freigegeben.")
-          print("=== MEETING BEENDET ===")
+                  if label == "positive": total_score += score
+                  elif label == "negative": total_score -= score
+                  
+              print(f"   🔎 AGENT_INSIDER: Sentiment-Bestätigung: {total_score:.2f}")
+              
+              if smc_trend == "BRUTAL_SMC_LONG" and total_score >= -0.2:
+                  sl = ob_level - (8 * pip_val)
+                  tp = live_price + (45 * pip_val)
+                  fmt = ".3f" if "JPY" in pair else ".5f"
+                  
+                  txt = f"🐋 INSTI-ALARM: BRUTALES SMC-SETUP (LONG)!\n\n" \
+                        f"• Währungspaar: {pair[:3]}/{pair[3:]}\n" \
+                        f"• Methode: Liquidity Sweep + FVG Rejection\n\n" \
+                        f"🎯 ENTRY (Sofort): {live_price:{fmt}}\n" \
+                        f"🛑 STOP-LOSS (SL): {sl:{fmt}} (Perfekt abgesichert unter dem Jagd-Tief)\n" \
+                        f"🏁 TAKE-PROFIT (TP): {tp:{fmt}} (Ziel nächste Liquiditätszone)\n\n" \
+                        f"Meldung: Die KIs bestätigen, dass das Smart Money die Kleinanleger rausgespült hat. Der Weg nach oben ist frei!"
+                  print(f"   -> CEO: Signal freigegeben!")
+                  send_email(f"🐋 SMC-MONSTER: {pair[:3]}/{pair[3:]} LONG!", txt)
+                  
+              elif smc_trend == "BRUTAL_SMC_SHORT" and total_score <= 0.2:
+                  sl = ob_level + (8 * pip_val)
+                  tp = live_price - (45 * pip_val)
+                  fmt = ".3f" if "JPY" in pair else ".5f"
+                  
+                  txt = f"🐋 INSTI-ALARM: BRUTALES SMC-SETUP (SHORT)!\n\n" \
+                        f"• Währungspaar: {pair[:3]}/{pair[3:]}\n" \
+                        f"• Methode: Stop-Hunt über altem Hoch + FVG Entry\n\n" \
+                        f"🎯 ENTRY (Sofort): {live_price:{fmt}}\n" \
+                        f"🛑 STOP-LOSS (SL): {sl:{fmt}} (Abgesichert über dem Jagd-Hoch)\n" \
+                        f"🏁 TAKE-PROFIT (TP): {tp:{fmt}}\n\n" \
+                        f"Meldung: Institutioneller Short-Abverkauf nach Liquiditätsjagd gestartet!"
+                  print(f"   -> CEO: Signal freigegeben!")
+                  send_email(f"🐋 SMC-MONSTER: {pair[:3]}/{pair[3:]} SHORT!", txt)
+                  
+          print("\n=== GLOBALER MARKT-SCAN BEENDET. SCHWARM IM STANDBY. ===")
           EOF
           python inline_script.py
