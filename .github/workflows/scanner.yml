@@ -34,7 +34,7 @@ jobs:
           import os, requests, smtplib
           from email.mime.text import MIMEText
 
-          092eb68a98884a5eb2d91a8756ac380b
+          NEWS_API_KEY = "092eb68a98884a5eb2d91a8756ac380b"
           HF_TOKEN = os.getenv("HF_TOKEN")
           EMAIL_SENDER = os.getenv("EMAIL_SENDER")
           EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
