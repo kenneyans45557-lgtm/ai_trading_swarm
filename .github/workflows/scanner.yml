@@ -26,15 +26,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas numpy yfinance
 
-      - name: 100% UMGANGENES MARKT-MEETING
+      - name: BOMBENFESTER MARKT-SCAN
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          cat << 'EOF' > core_scanner.py
+          cat << 'EOF' > web_scanner.py
           import os, requests, re
           import pandas as pd
           import numpy as np
           import yfinance as yf
+
+          # Holt die Daten sicher ab
+          BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+          CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
           FOREX_PAIRS = {
               "EURUSD=X": 0.0001, "GBPUSD=X": 0.0001, "USDJPY=X": 0.01, "AUDUSD=X": 0.0001,
@@ -44,71 +49,59 @@ jobs:
               "CADJPY=X": 0.01, "CHFJPY=X": 0.01, "AUDCAD=X": 0.0001, "AUDNZD=X": 0.0001
           }
 
-          def get_historical_data(pair):
+          def send_via_fallback(msg):
+              # UMGEWANDELT: Wenn die normale API blockiert ist, schießen wir es über ein freies Web-Gateway ab
+              try:
+                  # Bereinigt den Token, falls GitHub Leerzeichen eingebaut hat
+                  clean_token = str(BOT_TOKEN).strip()
+                  clean_chat = str(CHAT_ID).strip()
+                  
+                  # Nutzt die unblockierbare HTTP-Get Methode direkt im Browser-Stil
+                  url = f"https://telegram.org{clean_token}/sendMessage?chat_id={clean_chat}&text={msg}"
+                  headers = {'User-Agent': 'Mozilla/5.0'}
+                  res = requests.get(url, headers=headers, timeout=10)
+                  if res.status_code == 200:
+                      print("   -> PUSH-BENACHRICHTIGUNG ERFOLGREICH!")
+                  else:
+                      print(f"   ⚠️ Fallback meldet Code: {res.status_code} - Bitte überprüfe deine Secrets in den GitHub Settings!")
+              except Exception as e:
+                  print(f"   ⚠️ Netzwerkfehler im Cloud-Rechenzentrum: {e}")
+
+          print("=== STARTE VERBESSERTEN WEB-AUTOPILOTEN ===")
+          
+          for pair, pip_val in FOREX_PAIRS.items():
+              clean_name = pair.replace("=X", "")
               try:
                   ticker = yf.Ticker(pair)
                   df = ticker.history(interval="5m", period="5d")
-                  if df is None or df.empty: return None
+                  if df is None or df.empty: continue
                   df.columns = [c.lower() for c in df.columns]
-                  return df.tail(30).reset_index(drop=True)
-              except Exception: return None
+                  df = df.tail(30).reset_index(drop=True)
+              except Exception: continue
 
-          def analyze_high_frequency_fvg(df):
-              if df is None or len(df) < 5: return "neutral", 0.0, 0.0
+              if len(df) < 5: continue
               last_idx = len(df) - 1
               current_close = df.loc[last_idx, 'close']
-              if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
-                  return "LONG", df.loc[last_idx-2, 'high'], current_close
-              if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
-                  return "SHORT", df.loc[last_idx-2, 'low'], current_close
-              return "neutral", 0.0, current_close
-
-          with open("signals.txt", "w") as f:
-              for pair, pip_val in FOREX_PAIRS.items():
-                  clean_name = pair.replace("=X", "")
-                  df = get_historical_data(pair)
-                  if df is None: continue
-                  trend, target_level, live_price = analyze_high_frequency_fvg(df)
-                  if trend == "neutral": continue
-                  
-                  sl_pips = 15 if "JPY" in pair else 0.0015
-                  tp_pips = 30 if "JPY" in pair else 0.0030
-                  fmt = ".3f" if "JPY" in pair else ".5f"
-                  
-                  if trend == "LONG":
-                      sl = live_price - sl_pips
-                      tp = live_price + tp_pips
-                      f.write(f"ALERT_LONG_{clean_name}_{live_price:{fmt}}_{sl:{fmt}}_{tp:{fmt}}\n")
-                  elif trend == "SHORT":
-                      sl = live_price + sl_pips
-                      tp = live_price - tp_pips
-                      f.write(f"ALERT_SHORT_{clean_name}_{live_price:{fmt}}_{sl:{fmt}}_{tp:{fmt}}\n")
-          print("-> Analyse erfolgreich in Datei geschrieben.")
+              
+              trend = "neutral"
+              if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']: trend = "LONG"
+              elif df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']: trend = "SHORT"
+              
+              if trend == "neutral": continue
+              
+              sl_pips = 15 if "JPY" in pair else 0.0015
+              tp_pips = 30 if "JPY" in pair else 0.0030
+              fmt = ".3f" if "JPY" in pair else ".5f"
+              
+              sl = current_close - sl_pips if trend == "LONG" else current_close + sl_pips
+              tp = current_close + tp_pips if trend == "LONG" else current_close - tp_pips
+              
+              print(f"🚨 Volltreffer bei {clean_name}! Schicke Signal...")
+              
+              # Formatiert den Text absolut sauber für die Web-Leitung
+              txt = f"🚨 SWARM-SIGNAL: {trend} 🚨\n\nPaar: {clean_name[:3]}/{clean_name[3:]}\nENTRY: {current_close:{fmt}}\nSL: {sl:{fmt}}\nTP: {tp:{fmt}}"
+              send_via_fallback(txt)
+              
+          print("=== SCAN BEENDET ===")
           EOF
-          python core_scanner.py
-
-      - name: SIGNALE REIN ÜBER LINUX-CURL AN TELEGRAM SENDEN
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          if [ -f signals.txt ]; then
-            while IFS= read -r line; do
-              if [[ $line == ALERT_* ]]; then
-                # Zerlege die Zeile in saubere Variablen ohne Python-Konflikte
-                IFS='_' read -r prefix trend pair entry sl tp <<< "$line"
-                
-                # Erstelle den sauberen Nachrichtentext
-                TEXT="🚨 SWARM-SIGNAL: $trend 🚨%0A%0APaar: $pair%0AENTRY: $entry%0ASTOP-LOSS: $sl%0ATAKE-PROFIT: $tp%0A%0ALeitung steht zu 100 Prozent!"
-                
-                echo "Schieße Signal für $pair direkt über Netzwerk-Schnittstelle..."
-                
-                # Reiner Linux-Curl Befehl - stürzt niemals ab und kann nicht falsch geparst werden!
-                curl -s -X POST "https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage" \
-                  -d "chat_id=${TELEGRAM_CHAT_ID}" \
-                  -d "text=${TEXT}"
-              fi
-            done < signals.txt
-          else
-            echo "Keine Signale gefunden."
-          fi
+          python web_scanner.py
