@@ -34,6 +34,7 @@ jobs:
           cat << 'EOF' > final_beast.py
           import os, requests
           import yfinance as yf
+          import pandas as pd
 
           BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
           CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -50,8 +51,6 @@ jobs:
               try:
                   clean_token = str(BOT_TOKEN).strip()
                   clean_chat = str(CHAT_ID).strip()
-                  
-                  # Reiner Text-Versand über URL-Parameter ohne Sonderzeichen-Konflikte
                   url = f"https://telegram.org{clean_token}/sendMessage"
                   payload = {
                       "chat_id": clean_chat,
@@ -74,6 +73,8 @@ jobs:
                   df = ticker.history(interval="5m", period="5d")
                   if df is None or df.empty: continue
                   df.columns = [c.lower() for c in df.columns]
+                  # REPARIERT: Setzt den Index jetzt bombenfest zurück (Verhindert KeyError!)
+                  df = df.tail(30).reset_index(drop=True)
               except Exception: continue
 
               if len(df) < 5: continue
@@ -94,8 +95,6 @@ jobs:
               tp = current_close + tp_pips if trend == "LONG" else current_close - tp_pips
               
               print(f"🚨 Volltreffer bei {clean_name}! Sende Signal...")
-              
-              # Reiner Text OHNE jegliche Sonderzeichen oder Formatierungen
               txt = f"SIGNAL: {trend}\nPaar: {clean_name}\nENTRY: {current_close:{fmt}}\nSL: {sl:{fmt}}\nTP: {tp:{fmt}}"
               send_to_telegram(txt)
               
