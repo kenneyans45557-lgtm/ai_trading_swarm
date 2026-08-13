@@ -31,7 +31,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          cat << 'EOF' > final_beast.py
+          cat << 'EOF' > ultimate_beast.py
           import os, requests
           import yfinance as yf
           import pandas as pd
@@ -49,8 +49,16 @@ jobs:
 
           def send_to_telegram(msg):
               try:
-                  clean_token = str(BOT_TOKEN).strip()
+                  # SELBSTREINIGUNG: Löscht das Wort "bot", Leerzeichen und Fehler automatisch aus dem Token!
+                  raw_token = str(BOT_TOKEN).strip()
+                  if raw_token.lower().startswith("bot"):
+                      clean_token = raw_token[3:]
+                  else:
+                      clean_token = raw_token
+                  
                   clean_chat = str(CHAT_ID).strip()
+                  
+                  # Bombenfester URL-Aufbau ohne Parsing-Konflikte
                   url = f"https://telegram.org{clean_token}/sendMessage"
                   payload = {
                       "chat_id": clean_chat,
@@ -60,11 +68,11 @@ jobs:
                   if res.status_code == 200:
                       print("   -> TELEGRAM PUSH ERFOLGREICH!")
                   else:
-                      print(f"   ⚠️ API Fehler: {res.text}")
+                      print(f"   ⚠️ API Fehler: {res.text} - Überprüfe deine Tokens!")
               except Exception as e:
                   print(f"   ⚠️ Verbindungsfehler: {e}")
 
-          print("=== UNBLOCKIERBARES FINALES BEAST GESTARTET ===")
+          print("=== UNBLOCKIERBARES ULTIMATIVE BEAST GESTARTET ===")
           
           for pair, pip_val in FOREX_PAIRS.items():
               clean_name = pair.replace("=X", "")
@@ -73,7 +81,6 @@ jobs:
                   df = ticker.history(interval="5m", period="5d")
                   if df is None or df.empty: continue
                   df.columns = [c.lower() for c in df.columns]
-                  # REPARIERT: Setzt den Index jetzt bombenfest zurück (Verhindert KeyError!)
                   df = df.tail(30).reset_index(drop=True)
               except Exception: continue
 
@@ -100,4 +107,4 @@ jobs:
               
           print("=== SCAN BEENDET ===")
           EOF
-          python final_beast.py
+          python ultimate_beast.py
