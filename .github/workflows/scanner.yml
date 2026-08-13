@@ -26,18 +26,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas numpy yfinance
 
-      - name: BOMBENFESTER MARKT-SCAN
+      - name: UNBLOCKIERBARER ULTRA SCAN
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          cat << 'EOF' > web_scanner.py
-          import os, requests, re
-          import pandas as pd
-          import numpy as np
+          cat << 'EOF' > final_beast.py
+          import os, requests
           import yfinance as yf
 
-          # Holt die Daten sicher ab
           BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
           CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -49,25 +46,26 @@ jobs:
               "CADJPY=X": 0.01, "CHFJPY=X": 0.01, "AUDCAD=X": 0.0001, "AUDNZD=X": 0.0001
           }
 
-          def send_via_fallback(msg):
-              # UMGEWANDELT: Wenn die normale API blockiert ist, schießen wir es über ein freies Web-Gateway ab
+          def send_to_telegram(msg):
               try:
-                  # Bereinigt den Token, falls GitHub Leerzeichen eingebaut hat
                   clean_token = str(BOT_TOKEN).strip()
                   clean_chat = str(CHAT_ID).strip()
                   
-                  # Nutzt die unblockierbare HTTP-Get Methode direkt im Browser-Stil
-                  url = f"https://telegram.org{clean_token}/sendMessage?chat_id={clean_chat}&text={msg}"
-                  headers = {'User-Agent': 'Mozilla/5.0'}
-                  res = requests.get(url, headers=headers, timeout=10)
+                  # Reiner Text-Versand über URL-Parameter ohne Sonderzeichen-Konflikte
+                  url = f"https://telegram.org{clean_token}/sendMessage"
+                  payload = {
+                      "chat_id": clean_chat,
+                      "text": msg
+                  }
+                  res = requests.post(url, json=payload, timeout=10)
                   if res.status_code == 200:
-                      print("   -> PUSH-BENACHRICHTIGUNG ERFOLGREICH!")
+                      print("   -> TELEGRAM PUSH ERFOLGREICH!")
                   else:
-                      print(f"   ⚠️ Fallback meldet Code: {res.status_code} - Bitte überprüfe deine Secrets in den GitHub Settings!")
+                      print(f"   ⚠️ API Fehler: {res.text}")
               except Exception as e:
-                  print(f"   ⚠️ Netzwerkfehler im Cloud-Rechenzentrum: {e}")
+                  print(f"   ⚠️ Verbindungsfehler: {e}")
 
-          print("=== STARTE VERBESSERTEN WEB-AUTOPILOTEN ===")
+          print("=== UNBLOCKIERBARES FINALES BEAST GESTARTET ===")
           
           for pair, pip_val in FOREX_PAIRS.items():
               clean_name = pair.replace("=X", "")
@@ -76,7 +74,6 @@ jobs:
                   df = ticker.history(interval="5m", period="5d")
                   if df is None or df.empty: continue
                   df.columns = [c.lower() for c in df.columns]
-                  df = df.tail(30).reset_index(drop=True)
               except Exception: continue
 
               if len(df) < 5: continue
@@ -96,12 +93,12 @@ jobs:
               sl = current_close - sl_pips if trend == "LONG" else current_close + sl_pips
               tp = current_close + tp_pips if trend == "LONG" else current_close - tp_pips
               
-              print(f"🚨 Volltreffer bei {clean_name}! Schicke Signal...")
+              print(f"🚨 Volltreffer bei {clean_name}! Sende Signal...")
               
-              # Formatiert den Text absolut sauber für die Web-Leitung
-              txt = f"🚨 SWARM-SIGNAL: {trend} 🚨\n\nPaar: {clean_name[:3]}/{clean_name[3:]}\nENTRY: {current_close:{fmt}}\nSL: {sl:{fmt}}\nTP: {tp:{fmt}}"
-              send_via_fallback(txt)
+              # Reiner Text OHNE jegliche Sonderzeichen oder Formatierungen
+              txt = f"SIGNAL: {trend}\nPaar: {clean_name}\nENTRY: {current_close:{fmt}}\nSL: {sl:{fmt}}\nTP: {tp:{fmt}}"
+              send_to_telegram(txt)
               
           print("=== SCAN BEENDET ===")
           EOF
-          python web_scanner.py
+          python final_beast.py
