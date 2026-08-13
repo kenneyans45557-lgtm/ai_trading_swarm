@@ -5,9 +5,9 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
+# REPARIERT: Nur noch exakt die Werte, die GitHub offiziell erlaubt!
 permissions:
   contents: write
-  workflows: write
   actions: write
 
 jobs:
