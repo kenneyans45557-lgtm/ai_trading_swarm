@@ -1,0 +1,100 @@
+name: AI Trading Swarm Autopilot
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  run-swarm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Offizielle Telegram- & Finanz-Pakete installieren
+        run: |
+          python -m pip install --upgrade pip
+          # JETZT NEU: pyTelegramBotAPI installiert das offizielle Profi-Werkzeug!
+          pip install requests pandas numpy yfinance pyTelegramBotAPI
+
+      - name: UNZERSTÖRBARER TELEGRAM PUSH SCAN
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          cat << 'EOF' > secure_swarm.py
+          import os, telebot, requests
+          import yfinance as yf
+          import pandas as pd
+
+          # Holt die bereinigten Secrets direkt aus der Cloud
+          BOT_TOKEN = str(os.getenv("TELEGRAM_BOT_TOKEN")).strip()
+          CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID")).strip()
+
+          # Automatischer Schutz, falls das Wort "bot" im Secret steht
+          if BOT_TOKEN.lower().startswith("bot"):
+              BOT_TOKEN = BOT_TOKEN[3:]
+
+          FOREX_PAIRS = {
+              "EURUSD=X": 0.0001, "GBPUSD=X": 0.0001, "USDJPY=X": 0.01, "AUDUSD=X": 0.0001,
+              "USDCAD=X": 0.0001, "USDCHF=X": 0.0001, "NZDUSD=X": 0.0001, "EURGBP=X": 0.0001,
+              "EURJPY=X": 0.01, "GBPJPY=X": 0.01, "EURCHF=X": 0.0001, "EURAUD=X": 0.0001,
+              "EURCAD=X": 0.0001, "GBPAUD=X": 0.0001, "GBPCAD=X": 0.0001, "AUDJPY=X": 0.01,
+              "CADJPY=X": 0.01, "CHFJPY=X": 0.01, "AUDCAD=X": 0.0001, "AUDNZD=X": 0.0001
+          }
+
+          def send_to_telegram_pro(msg):
+              try:
+                  # NUTZT JETZT DIE OFFIZIELLE TELEGRAM-BIBLIOTHEK: Keine URLs mehr nötig!
+                  bot = telebot.TeleBot(BOT_TOKEN)
+                  bot.send_message(CHAT_ID, msg)
+                  print("   -> OFFIZIELLER TELEGRAM PUSH ERFOLGREICH!")
+              except Exception as e:
+                  print(f"   ⚠️ Fehler über offizielle Schnittstelle: {e}")
+
+          print("=== START DES NEUEN UNZERSTÖRBAREN TELEGRAM-PRO SCANNERs ===")
+          
+          for pair, pip_val in FOREX_PAIRS.items():
+              clean_name = pair.replace("=X", "")
+              try:
+                  ticker = yf.Ticker(pair)
+                  df = ticker.history(interval="5m", period="5d")
+                  if df is None or df.empty: continue
+                  df.columns = [c.lower() for c in df.columns]
+                  df = df.tail(30).reset_index(drop=True)
+              except Exception: continue
+
+              if len(df) < 5: continue
+              last_idx = len(df) - 1
+              current_close = df.loc[last_idx, 'close']
+              
+              trend = "neutral"
+              if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']: trend = "LONG"
+              elif df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']: trend = "SHORT"
+              
+              if trend == "neutral": continue
+              
+              sl_pips = 15 if "JPY" in pair else 0.0015
+              tp_pips = 30 if "JPY" in pair else 0.0030
+              fmt = ".3f" if "JPY" in pair else ".5f"
+              
+              sl = current_close - sl_pips if trend == "LONG" else current_close + sl_pips
+              tp = current_close + tp_pips if trend == "LONG" else current_close - tp_pips
+              
+              print(f"🚨 Volltreffer bei {clean_name}! Sende Signal...")
+              txt = f"🚨 SIGNAL DETEKTIERT 🚨\n\nPaar: {clean_name[:3]}/{clean_name[3:]}\nTyp: {trend}\nENTRY: {current_close:{fmt}}\nSL: {sl:{fmt}}\nTP: {tp:{fmt}}"
+              send_to_telegram_pro(txt)
+              
+          print("=== SCAN BEENDET ===")
+          EOF
+          python secure_swarm.py
