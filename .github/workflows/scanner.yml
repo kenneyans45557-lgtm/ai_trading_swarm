@@ -26,21 +26,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas numpy yfinance
 
-      - name: KI-Schwarm Meeting ausführen
+      - name: 100% UMGANGENES MARKT-MEETING
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          cat << 'EOF' > inline_script.py
+          cat << 'EOF' > core_scanner.py
           import os, requests, re
           import pandas as pd
           import numpy as np
           import yfinance as yf
-
-          HF_TOKEN = os.getenv("HF_TOKEN")
-          TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-          TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
           FOREX_PAIRS = {
               "EURUSD=X": 0.0001, "GBPUSD=X": 0.0001, "USDJPY=X": 0.01, "AUDUSD=X": 0.0001,
@@ -49,32 +43,6 @@ jobs:
               "EURCAD=X": 0.0001, "GBPAUD=X": 0.0001, "GBPCAD=X": 0.0001, "AUDJPY=X": 0.01,
               "CADJPY=X": 0.01, "CHFJPY=X": 0.01, "AUDCAD=X": 0.0001, "AUDNZD=X": 0.0001
           }
-
-          def send_telegram_message(message):
-              try:
-                  url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
-                  payload = {
-                      "chat_id": TELEGRAM_CHAT_ID,
-                      "text": message
-                      # parse_mode komplett entfernt, damit Telegram reinen Text ohne Formatierungsfehler einliest!
-                  }
-                  response = requests.post(url, json=payload, timeout=10)
-                  if response.status_code == 200:
-                      print("-> Info: Signal erfolgreich an Telegram gepusht!")
-                  else:
-                      print(f"-> Telegram API Fehler: {response.text}")
-              except Exception as e:
-                  print(f"-> Allgemeiner Telegram Fehler: {e}")
-
-          def get_market_news(pair):
-              clean_pair = pair.replace("=X", "")
-              search = f"{clean_pair[:3]}+{clean_pair[3:]}"
-              url = f"https://google.com{search}+forex&hl=en-US&gl=US&ceid=US:en"
-              try:
-                  response = requests.get(url, timeout=10)
-                  headlines = re.findall(r"<title>(.*?)</title>", response.text)
-                  return [h for h in headlines if h and "Google News" not in h][:3]
-              except Exception: return []
 
           def get_historical_data(pair):
               try:
@@ -89,75 +57,58 @@ jobs:
               if df is None or len(df) < 5: return "neutral", 0.0, 0.0
               last_idx = len(df) - 1
               current_close = df.loc[last_idx, 'close']
-              
               if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
-                  return "VOLUME_LONG", df.loc[last_idx-2, 'high'], current_close
-                  
+                  return "LONG", df.loc[last_idx-2, 'high'], current_close
               if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
-                  return "VOLUME_SHORT", df.loc[last_idx-2, 'low'], current_close
-                  
+                  return "SHORT", df.loc[last_idx-2, 'low'], current_close
               return "neutral", 0.0, current_close
 
-          def analyze_sentiment_with_ki(headline):
-              api_url = "https://huggingface.co"
-              headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-              try:
-                  response = requests.post(api_url, headers=headers, json={"inputs": headline}, timeout=15).json()
-                  if isinstance(response, list) and len(response) > 0:
-                      best_pick = max(response, key=lambda x: x['score'])
-                      return best_pick['label'], best_pick['score']
-                  return "neutral", 0.0
-              except Exception: return "neutral", 0.0
-
-          print("=== START DES AUTOMATISIERTEN TELEGRAM-TESTS ===")
-          print("🤖 AGENT_ORCHESTRATOR: Verbinde KIs mit deinem Telegram...")
-          
-          for pair, pip_val in FOREX_PAIRS.items():
-              clean_name = pair.replace("=X", "")
-              df = get_historical_data(pair)
-              if df is None: continue
-              
-              trend, target_level, live_price = analyze_high_frequency_fvg(df)
-              if trend == "neutral": continue
-              
-              headlines = get_market_news(pair)
-              total_score = 0
-              for title in headlines:
-                  label, score = analyze_sentiment_with_ki(title)
-                  if label == "positive": total_score += score
-                  elif label == "negative": total_score -= score
-              
-              sl_pips = 15 if "JPY" in pair else 0.0015
-              tp_pips = 30 if "JPY" in pair else 0.0030
-              fmt = ".3f" if "JPY" in pair else ".5f"
-              
-              # UMWANDELT: Reiner Text ohne störende HTML oder Markdown-Zeichen
-              if trend == "VOLUME_LONG":
-                  sl = live_price - sl_pips
-                  tp = live_price + tp_pips
-                  txt = f"TELEGRAM-TEST: LONG\n\n" \
-                        f"Paar: {clean_name[:3]}/{clean_name[3:]}\n" \
-                        f"ENTRY: {live_price:{fmt}}\n" \
-                        f"STOP-LOSS: {sl:{fmt}}\n" \
-                        f"TAKE-PROFIT: {tp:{fmt}}\n\n" \
-                        f"Stimmungsscore: {total_score:.2f}\n" \
-                        f"Die Leitung laeuft fehlerfrei!"
-                  print(f"🚨 Volltreffer bei {clean_name}! Schieße Nachricht an Telegram...")
-                  send_telegram_message(txt)
+          with open("signals.txt", "w") as f:
+              for pair, pip_val in FOREX_PAIRS.items():
+                  clean_name = pair.replace("=X", "")
+                  df = get_historical_data(pair)
+                  if df is None: continue
+                  trend, target_level, live_price = analyze_high_frequency_fvg(df)
+                  if trend == "neutral": continue
                   
-              elif trend == "VOLUME_SHORT":
-                  sl = live_price + sl_pips
-                  tp = live_price - tp_pips
-                  txt = f"TELEGRAM-TEST: SHORT\n\n" \
-                        f"Paar: {clean_name[:3]}/{clean_name[3:]}\n" \
-                        f"ENTRY: {live_price:{fmt}}\n" \
-                        f"STOP-LOSS: {sl:{fmt}}\n" \
-                        f"TAKE-PROFIT: {tp:{fmt}}\n\n" \
-                        f"Stimmungsscore: {total_score:.2f}\n" \
-                        f"Die Leitung laeuft fehlerfrei!"
-                  print(f"🚨 Volltreffer bei {clean_name}! Sende Nachricht an Telegram...")
-                  send_telegram_message(txt)
+                  sl_pips = 15 if "JPY" in pair else 0.0015
+                  tp_pips = 30 if "JPY" in pair else 0.0030
+                  fmt = ".3f" if "JPY" in pair else ".5f"
                   
-          print("=== SCAN BEENDET ===")
+                  if trend == "LONG":
+                      sl = live_price - sl_pips
+                      tp = live_price + tp_pips
+                      f.write(f"ALERT_LONG_{clean_name}_{live_price:{fmt}}_{sl:{fmt}}_{tp:{fmt}}\n")
+                  elif trend == "SHORT":
+                      sl = live_price + sl_pips
+                      tp = live_price - tp_pips
+                      f.write(f"ALERT_SHORT_{clean_name}_{live_price:{fmt}}_{sl:{fmt}}_{tp:{fmt}}\n")
+          print("-> Analyse erfolgreich in Datei geschrieben.")
           EOF
-          python inline_script.py
+          python core_scanner.py
+
+      - name: SIGNALE REIN ÜBER LINUX-CURL AN TELEGRAM SENDEN
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -f signals.txt ]; then
+            while IFS= read -r line; do
+              if [[ $line == ALERT_* ]]; then
+                # Zerlege die Zeile in saubere Variablen ohne Python-Konflikte
+                IFS='_' read -r prefix trend pair entry sl tp <<< "$line"
+                
+                # Erstelle den sauberen Nachrichtentext
+                TEXT="🚨 SWARM-SIGNAL: $trend 🚨%0A%0APaar: $pair%0AENTRY: $entry%0ASTOP-LOSS: $sl%0ATAKE-PROFIT: $tp%0A%0ALeitung steht zu 100 Prozent!"
+                
+                echo "Schieße Signal für $pair direkt über Netzwerk-Schnittstelle..."
+                
+                # Reiner Linux-Curl Befehl - stürzt niemals ab und kann nicht falsch geparst werden!
+                curl -s -X POST "https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage" \
+                  -d "chat_id=${TELEGRAM_CHAT_ID}" \
+                  -d "text=${TEXT}"
+              fi
+            done < signals.txt
+          else
+            echo "Keine Signale gefunden."
+          fi
