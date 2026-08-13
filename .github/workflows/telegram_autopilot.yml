@@ -2,7 +2,7 @@ name: AI Trading Swarm Autopilot
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Scannt jetzt pünktlich alle 15 Minuten deine Turnier-Paare!
+    - cron: '*/15 * * * *' # Scannt pünktlich alle 15 Minuten deine Turnier-Paare!
   workflow_dispatch: # Ermöglicht dir, den Scan jederzeit manuell per Button zu starten
 
 permissions:
@@ -35,7 +35,6 @@ jobs:
           import os, telebot, yfinance as yf
           import pandas as pd
 
-          # Keys absolut sicher aus den GitHub-Secrets laden
           BOT_TOKEN = str(os.getenv("TELEGRAM_BOT_TOKEN")).strip()
           CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID")).strip()
           
@@ -46,7 +45,6 @@ jobs:
 
           print("=== STARTE SOFORT-ANALYSE FÜR DEIN TURNIER ===")
 
-          # Deine 3 Profi-Paare (Gold, Euro, GBP/CAD)
           PAIRS = {
               "GC=F": "GOLD (XAUUSD)",
               "EURUSD=X": "EURUSD",
@@ -56,24 +54,22 @@ jobs:
           for pair, clean_name in PAIRS.items():
               try:
                   ticker = yf.Ticker(pair)
-                  # Holt die echten 15-Minuten-Kerzen (M15)
                   df = ticker.history(interval="15m", period="2d")
                   
                   if df is None or df.empty:
                       print(f"Keine Daten empfangen für {clean_name}")
                       continue
-                      
-                  # Spaltennamen vereinheitlichen
-                  df.columns = [c.lower() for c in df.columns]
                   
+                  # FIX: Wir prüfen, wie die Spalte geschrieben wird (Close oder close)
+                  close_col = 'Close' if 'Close' in df.columns else 'close'
+                      
                   if len(df) < 5:
                       continue
                       
                   last_idx = len(df) - 1
-                  current_close = df.loc[last_idx, 'close']
-                  prev_close = df.loc[last_idx-1, 'close']
+                  current_close = df.iloc[last_idx][close_col]
+                  prev_close = df.iloc[last_idx-1][close_col]
                   
-                  # Mathematisch saubere Trend-Idee für das M15-Setup
                   if current_close > prev_close:
                       setup_idee = "🟢 M15 TREND-ANALYSE: POTENZIELLER LONG-EINSTIEG"
                       details = "Die Bullen übernehmen das Volumen auf M15. Halte Ausschau nach Kauf-Setups!"
@@ -81,10 +77,8 @@ jobs:
                       setup_idee = "🔴 M15 TREND-ANALYSE: POTENZIELLER SHORT-EINSTIEG"
                       details = "Die Bären drücken den Kurs im M15-Chart. Halte Ausschau nach Verkaufs-Setups!"
                   
-                  # Formatierung für die Nachkommastellen anpassen (Gold vs Forex)
                   fmt = ".2f" if "GC=F" in pair else ".5f"
                   
-                  # Die Nachricht, die direkt auf dein Handy fliegt
                   msg = (
                       f"📊 **FUNDEDNEXT TURNIER-SCANNER** 📊\n\n"
                       f"➡️ **Asset:** `{clean_name}`\n"
