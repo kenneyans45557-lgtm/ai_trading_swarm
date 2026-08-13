@@ -1,7 +1,9 @@
 name: AI Trading Swarm Autopilot
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *' # Scannt jetzt pünktlich alle 15 Minuten deine Turnier-Paare!
+  workflow_dispatch: # Ermöglicht dir, den Scan jederzeit manuell per Button zu starten
 
 permissions:
   contents: write
@@ -28,156 +30,76 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cat << 'EOF' > m15_beast.py
-          import os, telebot, requests, time, re
-          import yfinance as yf
+          import os, telebot, yfinance as yf
           import pandas as pd
-          import numpy as np
 
+          # Keys absolut sicher aus den GitHub-Secrets laden
           BOT_TOKEN = str(os.getenv("TELEGRAM_BOT_TOKEN")).strip()
           CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID")).strip()
-          HF_TOKEN = os.getenv("HF_TOKEN")
-
+          
           if BOT_TOKEN.lower().startswith("bot"):
               BOT_TOKEN = BOT_TOKEN[3:]
 
-          # DEINE 3 ELITE-PARE: Radikal gekürzt auf Gold, Euro und GBP/CAD!
-          EXPERT_PAIRS = {
-              "GC=F": 0.1,       # Gold (XAU/USD)
-              "EURUSD=X": 0.0001, # EUR/USD
-              "GBPCAD=X": 0.0001  # GBP/CAD
+          bot = telebot.TeleBot(BOT_TOKEN)
+
+          print("=== STARTE SOFORT-ANALYSE FÜR DEIN TURNIER ===")
+
+          # Deine 3 Profi-Paare (Gold, Euro, GBP/CAD)
+          PAIRS = {
+              "GC=F": "GOLD (XAUUSD)",
+              "EURUSD=X": "EURUSD",
+              "GBPCAD=X": "GBPCAD"
           }
 
-          def send_to_telegram_pro(msg):
+          for pair, clean_name in PAIRS.items():
               try:
-                  bot = telebot.TeleBot(BOT_TOKEN)
-                  bot.send_message(CHAT_ID, msg, parse_mode="HTML")
-                  print("   -> TELEGRAM SIGNAL ERFOLGREICH GEPASTED!")
-              except Exception as e:
-                  print(f"   ⚠️ Telegram-Fehler: {e}")
-
-          def get_market_news(pair):
-              clean = "Gold" if pair == "GC=F" else pair.replace("=X", "")
-              search = f"{clean[:3]}+{clean[3:]}" if pair != "GC=F" else "Gold+commodity"
-              url = f"https://google.com{search}+forex&hl=en-US&gl=US&ceid=US:en"
-              try:
-                  response = requests.get(url, timeout=10)
-                  headlines = re.findall(r"<title>(.*?)</title>", response.text)
-                  return [h for h in headlines if h and "Google News" not in h][:3]
-              except Exception: return []
-
-          def analyze_sentiment_with_ki(headline):
-              api_url = "https://huggingface.co"
-              headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-              try:
-                  response = requests.post(api_url, headers=headers, json={"inputs": headline}, timeout=15).json()
-                  if isinstance(response, list) and len(response) > 0:
-                      best_pick = max(response, key=lambda x: x['score'])
-                      return best_pick['label'], best_pick['score']
-                  return "neutral", 0.0
-              except Exception: return "neutral", 0.0
-
-          def analyze_brutal_m15_smc(df, pair):
-              if df is None or len(df) < 25: return "neutral", 0.0, 0.0
-              last_idx = len(df) - 1
-              current_close = df.loc[last_idx, 'close']
-              current_low = df.loc[last_idx, 'low']
-              current_high = df.loc[last_idx, 'high']
-              
-              # Strenger Lookback auf M15 für echte Institutionen-Hochs/Tiefs
-              lookback_df = df.iloc[last_idx-21 : last_idx-1]
-              highest_high = lookback_df['high'].max()
-              lowest_low = lookback_df['low'].min()
-              
-              # Bullish Smart Money Concept Setup (Liquidity Sweep + FVG)
-              if current_low < lowest_low and current_close > lowest_low:
-                  if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
-                      for i in range(last_idx-1, 0, -1):
-                          if df.loc[i, 'close'] < df.loc[i, 'open']:
-                              return "BRUTAL_SMC_LONG", df.loc[i, 'low'], current_close
-              
-              # Bearish Smart Money Concept Setup
-              if current_high > highest_high and current_close < highest_high:
-                  if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
-                      for i in range(last_idx-1, 0, -1):
-                          if df.loc[i, 'close'] > df.loc[i, 'open']:
-                              return "BRUTAL_SMC_SHORT", df.loc[i, 'high'], current_close
-                              
-              return "neutral", 0.0, current_close
-
-          print("=== M15 EXPERT LOOP GESTARTET ===")
-          
-          # Der unblockierbare Dauerschleifen-Königsweg
-          for cycle in range(24): # Läuft für volle 6 Stunden am Stück durch
-              print(f"\n🔄 Starte Scan-Durchlauf Nummer {cycle + 1}...")
-              
-              for pair, pip_val in EXPERT_PAIRS.items():
-                  clean_name = "XAU/USD (Gold)" if pair == "GC=F" else f"{pair[:3]}/{pair[3:6]}"
+                  ticker = yf.Ticker(pair)
+                  # Holt die echten 15-Minuten-Kerzen (M15)
+                  df = ticker.history(interval="15m", period="2d")
                   
-                  try:
-                      ticker = yf.Ticker(pair)
-                      # ZURÜCK AUF DEN REALE 15-MINUTEN-CHART
-                      df = ticker.history(interval="15m", period="5d")
-                      if df is None or df.empty: continue
-                      df.columns = [c.lower() for c in df.columns]
-                      df = df.tail(50).reset_index(drop=True)
-                  except Exception: continue
-
-                  smc_trend, ob_level, live_price = analyze_brutal_m15_smc(df, pair)
-                  if smc_trend == "neutral": continue
+                  if df is None or df.empty:
+                      print(f"Keine Daten empfangen für {clean_name}")
+                      continue
+                      
+                  # Spaltennamen vereinheitlichen
+                  df.columns = [c.lower() for c in df.columns]
                   
-                  # KI Sentiment Validierung
-                  headlines = get_market_news(pair)
-                  total_score = 0
-                  for title in headlines:
-                      label, score = analyze_sentiment_with_ki(title)
-                      if label == "positive": total_score += score
-                      elif label == "negative": total_score -= score
-
-                  # Dynamische Lot-Size Berechnung für dein 100K-Konto (0.5% Risiko = 500€ Obergrenze)
-                  pips_stop = abs(live_price - ob_level) / pip_val if pair != "GC=F" else abs(live_price - ob_level)
-                  pips_stop = max(pips_stop, 15.0 if pair == "GC=F" else 5.0)
+                  if len(df) < 5:
+                      continue
+                      
+                  last_idx = len(df) - 1
+                  current_close = df.loc[last_idx, 'close']
+                  prev_close = df.loc[last_idx-1, 'close']
                   
-                  if pair == "GC=F":
-                      calculated_lots = 500.0 / (pips_stop * 100.0) # Gold Hebel-Anpassung
-                      final_lots = min(max(round(calculated_lots, 2), 0.1), 5.0) # Maximale Obergrenze geschützt
+                  # Mathematisch saubere Trend-Idee für das M15-Setup
+                  if current_close > prev_close:
+                      setup_idee = "🟢 M15 TREND-ANALYSE: POTENZIELLER LONG-EINSTIEG"
+                      details = "Die Bullen übernehmen das Volumen auf M15. Halte Ausschau nach Kauf-Setups!"
                   else:
-                      calculated_lots = 500.0 / (pips_stop * 10.0)
-                      final_lots = min(max(round(calculated_lots, 2), 0.1), 5.0)
-
-                  fmt = ".2f" if pair == "GC=F" else ".5f"
+                      setup_idee = "🔴 M15 TREND-ANALYSE: POTENZIELLER SHORT-EINSTIEG"
+                      details = "Die Bären drücken den Kurs im M15-Chart. Halte Ausschau nach Verkaufs-Setups!"
                   
-                  if smc_trend == "BRUTAL_SMC_LONG" and total_score >= -0.3:
-                      sl = ob_level - (2 * pip_val)
-                      tp = live_price + (pips_stop * 3 * pip_val) # Festes CRV 1:3 ins Ziel
-                      
-                      txt = f"🏆 <b>SMC EXPERT-SIGNAL: LONG</b> 🏆\n\n" \
-                            f"• <b>Paar:</b> {clean_name}\n" \
-                            f"• <b>Lots für 100K (0.5%):</b> <code>{final_lots}</code>\n\n" \
-                            f"🎯 <b>ENTRY:</b> <code>{live_price:{fmt}}</code>\n" \
-                            f"🛑 <b>STOP-LOSS:</b> <code>{sl:{fmt}}</code>\n" \
-                            f"🏁 <b>TAKE-PROFIT:</b> <code>{tp:{fmt}}</code>\n\n" \
-                            f"<i>Echter M15-Institutionen-Orderblock erkannt! Sentiment: {total_score:.2f}</i>"
-                      send_to_telegram_pro(txt)
-                      
-                  elif smc_trend == "BRUTAL_SMC_SHORT" and total_score <= 0.3:
-                      sl = ob_level + (2 * pip_val)
-                      tp = live_price - (pips_stop * 3 * pip_val)
-                      
-                      txt = f"⚠️ <b>SMC EXPERT-SIGNAL: SHORT</b> ⚠️\n\n" \
-                            f"• <b>Paar:</b> {clean_name}\n" \
-                            f"• <b>Lots für 100K (0.5%):</b> <code>{final_lots}</code>\n\n" \
-                            f"🎯 <b>ENTRY:</b> <code>{live_price:{fmt}}</code>\n" \
-                            f"🛑 <b>STOP-LOSS:</b> <code>{sl:{fmt}}</code>\n" \
-                            f"🏁 <b>TAKE-PROFIT:</b> <code>{tp:{fmt}}</code>\n\n" \
-                            f"<i>Echter M15-Institutionen-Orderblock erkannt! Sentiment: {total_score:.2f}</i>"
-                      send_to_telegram_pro(txt)
-              
-              print("😴 Schlafe für 15 Minuten bis zum nächsten M15-Kerzenschluss...")
-              time.sleep(900) # Wartet exakt 15 Minuten im Hintergrund
-              
-          print("=== EXPERT LOOP NACH 6 STUNDEN BEENDET ===")
+                  # Formatierung für die Nachkommastellen anpassen (Gold vs Forex)
+                  fmt = ".2f" if "GC=F" in pair else ".5f"
+                  
+                  # Die Nachricht, die direkt auf dein Handy fliegt
+                  msg = (
+                      f"📊 **FUNDEDNEXT TURNIER-SCANNER** 📊\n\n"
+                      f"➡️ **Asset:** `{clean_name}`\n"
+                      f"➡️ **Aktueller Kurs:** `{current_close:{fmt}}`\n\n"
+                      f"💡 **Analyse:**\n*{setup_idee}*\n"
+                      f"📍 _{details}_\n\n"
+                      f"🏁 _Überprüfe jetzt deinen Chart für den optimalen Entry!_"
+                  )
+                  
+                  bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+                  print(f"Erfolgreich gesendet: {clean_name}")
+                  
+              except Exception as e:
+                  print(f"Fehler bei {clean_name}: {e}")
+
+          print("=== ANALYSE ERFOLGREICH BEENDET ===")
           EOF
           python m15_beast.py
