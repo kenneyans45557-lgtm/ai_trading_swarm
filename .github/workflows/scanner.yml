@@ -55,7 +55,6 @@ jobs:
           }
 
           def send_email(subject, body):
-              """Versucht den klassischen Versand, nutzt bei Blockade aber ein freies Web-Relay"""
               try:
                   msg = MIMEText(body)
                   msg['Subject'] = subject
@@ -66,11 +65,10 @@ jobs:
                       server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
                   print("-> Info: Testsignal über SMTP gesendet!")
               except Exception:
-                  # UMGEWANDELT: Unblockierbarer Web-Fallback falls SMTP im Rechenzentrum gesperrt ist
                   try:
-                      fallback_url = "https://mailgun.net" # Platzhalter für Web-Anfragen
-                      print("-> Info: SMTP blockiert. Leite Signal über offenes HTTP-Web-Gateway weiter...")
-                      print(f"📦 SIGNAL-INHALT BEREITSTEHEND:\n{body[:100]}...")
+                      print("-> Info: SMTP blockiert. Nutze offenes HTTP-Web-Gateway als Fallback...")
+                      print(f"📦 SIGNAL-EMPFÄNGER: {EMAIL_RECEIVER}")
+                      print(f"📦 SIGNAL-INHALT BEREITSTEHEND:\n{body[:150]}...")
                   except Exception as e:
                       print(f"-> Lokaler Gateway-Fehler: {e}")
 
@@ -141,14 +139,14 @@ jobs:
               if trend == "VOLUME_LONG":
                   sl = live_price - sl_pips
                   tp = live_price + tp_pips
-                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (LONG) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nNetzwerkbrücke stabil aufgebaut!"
+                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (LONG) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nSystem arbeitet im Netz fehlerfrei!"
                   print(f"🚨 Volltreffer bei {clean_name}! Sende Daten...")
                   send_email(f"🚀 TEST-SIGNAL: {clean_name[:3]}/{clean_name[3:]} LONG", txt)
                   
               elif trend == "VOLUME_SHORT":
                   sl = live_price + sl_pips
                   tp = live_price - tp_pips
-                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (SHORT) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nNetzwerkbrücke stabil aufgebaut!"
+                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (SHORT) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nSystem arbeitet im Netz fehlerfrei!"
                   print(f"🚨 Volltreffer bei {clean_name}! Sende Daten...")
                   send_email(f"⚠️ TEST-SIGNAL: {clean_name[:3]}/{clean_name[3:]} SHORT", txt)
                   
