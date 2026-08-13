@@ -2,8 +2,8 @@ name: AI Trading Swarm Autopilot
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Scannt pünktlich alle 15 Minuten deine Turnier-Paare!
-  workflow_dispatch: # Ermöglicht dir, den Scan jederzeit manuell per Button zu starten
+    - cron: '*/30 * * * *' # JETZT AUF AUTOMATISCH: Alle 30 Minuten ein Voll-Scan!
+  workflow_dispatch: # Der manuelle Button bleibt für dich da
 
 permissions:
   contents: write
@@ -26,7 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas numpy yfinance pyTelegramBotAPI
 
-      - name: SCHARFES M15 3-PAAR PROFI-SYSTEM
+      - name: SCHARFES M15 3-PAAR SMC PROFI-SYSTEM
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -34,6 +34,7 @@ jobs:
           cat << 'EOF' > m15_beast.py
           import os, telebot, yfinance as yf
           import pandas as pd
+          import numpy as np
 
           BOT_TOKEN = str(os.getenv("TELEGRAM_BOT_TOKEN")).strip()
           CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID")).strip()
@@ -43,7 +44,7 @@ jobs:
 
           bot = telebot.TeleBot(BOT_TOKEN)
 
-          print("=== STARTE SOFORT-ANALYSE FÜR DEIN TURNIER ===")
+          print("=== STARTE SMC-SCAN MIT LIVE-STATUS (M15) ===")
 
           PAIRS = {
               "GC=F": "GOLD (XAUUSD)",
@@ -54,46 +55,109 @@ jobs:
           for pair, clean_name in PAIRS.items():
               try:
                   ticker = yf.Ticker(pair)
-                  df = ticker.history(interval="15m", period="2d")
+                  df = ticker.history(interval="15m", period="5d") 
                   
-                  if df is None or df.empty:
-                      print(f"Keine Daten empfangen für {clean_name}")
-                      continue
-                  
-                  # FIX: Wir prüfen, wie die Spalte geschrieben wird (Close oder close)
+                  if df is None or df.empty: continue
                   close_col = 'Close' if 'Close' in df.columns else 'close'
+                  high_col = 'High' if 'High' in df.columns else 'high'
+                  low_col = 'Low' if 'Low' in df.columns else 'low'
+                  open_col = 'Open' if 'Open' in df.columns else 'open'
                       
-                  if len(df) < 5:
-                      continue
-                      
+                  if len(df) < 40: continue
+                  
                   last_idx = len(df) - 1
-                  current_close = df.iloc[last_idx][close_col]
-                  prev_close = df.iloc[last_idx-1][close_col]
+                  current_price = df.iloc[last_idx][close_col]
                   
-                  if current_close > prev_close:
-                      setup_idee = "🟢 M15 TREND-ANALYSE: POTENZIELLER LONG-EINSTIEG"
-                      details = "Die Bullen übernehmen das Volumen auf M15. Halte Ausschau nach Kauf-Setups!"
-                  else:
-                      setup_idee = "🔴 M15 TREND-ANALYSE: POTENZIELLER SHORT-EINSTIEG"
-                      details = "Die Bären drücken den Kurs im M15-Chart. Halte Ausschau nach Verkaufs-Setups!"
+                  # --- SMC STRUCT ---
+                  df['swing_high'] = (df[high_col] > df[high_col].shift(2)) & (df[high_col] > df[high_col].shift(1)) & \
+                                     (df[high_col] > df[high_col].shift(-1)) & (df[high_col] > df[high_col].shift(-2))
+                  df['swing_low'] = (df[low_col] < df[low_col].shift(2)) & (df[low_col] < df[low_col].shift(1)) & \
+                                    (df[low_col] < df[low_col].shift(-1)) & (df[low_col] < df[low_col].shift(-2))
                   
+                  highs_df = df[df['swing_high']]
+                  lows_df = df[df['swing_low']]
+                  
+                  if len(highs_df) < 2 or len(lows_df) < 2: continue
+                  
+                  recent_high = highs_df.iloc[-1][high_col]
+                  recent_low = lows_df.iloc[-1][low_col]
+                  
+                  signal_found = False
                   fmt = ".2f" if "GC=F" in pair else ".5f"
                   
-                  msg = (
-                      f"📊 **FUNDEDNEXT TURNIER-SCANNER** 📊\n\n"
-                      f"➡️ **Asset:** `{clean_name}`\n"
-                      f"➡️ **Aktueller Kurs:** `{current_close:{fmt}}`\n\n"
-                      f"💡 **Analyse:**\n*{setup_idee}*\n"
-                      f"📍 _{details}_\n\n"
-                      f"🏁 _Überprüfe jetzt deinen Chart für den optimalen Entry!_"
-                  )
-                  
-                  bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
-                  print(f"Erfolgreich gesendet: {clean_name}")
-                  
+                  # 1. BULLISCH DETEKTION
+                  if current_price > df.iloc[last_idx-3][close_col]:
+                      for i in range(last_idx - 1, last_idx - 25, -1):
+                          if df.iloc[i][close_col] < df.iloc[i][open_col]:
+                              ob_low = df.iloc[i][low_col]
+                              ob_high = df.iloc[i][high_col]
+                              
+                              if ob_low <= current_price <= (ob_high + (ob_high - ob_low)*0.5):
+                                  entry = current_price
+                                  sl = ob_low - (ob_low * 0.0003)
+                                  tp = recent_high
+                                  
+                                  msg = (
+                                      f"🚨 **SMC LIVE SETUP DETEKTIERT** 🚨\n\n"
+                                      f"➡️ **Asset:** `{clean_name}`\n"
+                                      f"➡️ **Typ:** `🟢 BULLISH RE-TEST (BUY)`\n\n"
+                                      f"📌 **ENTRY:** `{entry:{fmt}}`\n"
+                                      f"🛡️ **STOP LOSS (SL):** `{sl:{fmt}}`\n"
+                                      f"🎯 **TAKE PROFIT (TP):** `{tp:{fmt}}`\n\n"
+                                      f"📊 _Perfekter Anlauf in den M15 Order Block!_"
+                                  )
+                                  bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+                                  signal_found = True
+                                  break
+                      if signal_found: continue
+
+                  # 2. BÄRISCH DETEKTION
+                  if current_price < df.iloc[last_idx-3][close_col]:
+                      for i in range(last_idx - 1, last_idx - 25, -1):
+                          if df.iloc[i][close_col] > df.iloc[i][open_col]:
+                              ob_low = df.iloc[i][low_col]
+                              ob_high = df.iloc[i][high_col]
+                              
+                              if (ob_low - (ob_high - ob_low)*0.5) <= current_price <= ob_high:
+                                  entry = current_price
+                                  sl = ob_high + (ob_high * 0.0003)
+                                  tp = recent_low
+                                  
+                                  msg = (
+                                      f"🚨 **SMC LIVE SETUP DETEKTIERT** 🚨\n\n"
+                                      f"➡️ **Asset:** `{clean_name}`\n"
+                                      f"➡️ **Typ:** `🔴 BEARISH RE-TEST (SELL)`\n\n"
+                                      f"📌 **ENTRY:** `{entry:{fmt}}`\n"
+                                      f"🛡️ **STOP LOSS (SL):** `{sl:{fmt}}`\n"
+                                      f"🎯 **TAKE PROFIT (TP):** `{tp:{fmt}}`\n\n"
+                                      f"📊 _Perfekter Anlauf in den M15 Order Block!_"
+                                  )
+                                  bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
+                                  signal_found = True
+                                  break
+                      if signal_found: continue
+
+                  # --- LIVE STATUS BERICHT (Wenn KEIN Signal da ist) ---
+                  if not signal_found:
+                      # Wir suchen den letzten potenziellen Order Block, auf den das System wartet
+                      target_ob_txt = "Suche nach neuem Struktur-Impuls..."
+                      for i in range(last_idx - 1, last_idx - 20, -1):
+                          if df.iloc[i][close_col] < df.iloc[i][open_col]: # Letzter Kauf-Bereich
+                              target_ob_txt = f"Warte auf tieferen Rücklauf in die Kauf-Zone bei ca. `{df.iloc[i][high_col]:{fmt}}`"
+                              break
+                      
+                      status_msg = (
+                          f"🔍 **SMC MARKT-INFO** 🔍\n\n"
+                          f"➡️ **Asset:** `{clean_name}`\n"
+                          f"➡️ **Kurs:** `{current_price:{fmt}}`\n\n"
+                          f"📋 **Wartestatus:**\n_{target_ob_txt}_\n"
+                          f"ℹ️ _Kein voreiliger Einstieg! Das System schützt dein FundedNext-Konto vor unsauberen Marktphasen._"
+                      )
+                      bot.send_message(CHAT_ID, status_msg, parse_mode="Markdown")
+
               except Exception as e:
                   print(f"Fehler bei {clean_name}: {e}")
 
-          print("=== ANALYSE ERFOLGREICH BEENDET ===")
+          print("=== SMC ANALYSE ERFOLGREICH BEENDET ===")
           EOF
           python m15_beast.py
