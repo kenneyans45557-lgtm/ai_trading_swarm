@@ -5,7 +5,6 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
-# REPARIERT: Nur noch exakt die Werte, die GitHub offiziell erlaubt!
 permissions:
   contents: write
   actions: write
@@ -30,21 +29,18 @@ jobs:
       - name: KI-Schwarm Meeting ausführen
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
-          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           cat << 'EOF' > inline_script.py
-          import os, requests, smtplib, re
+          import os, requests, re
           import pandas as pd
           import numpy as np
           import yfinance as yf
-          from email.mime.text import MIMEText
 
           HF_TOKEN = os.getenv("HF_TOKEN")
-          EMAIL_SENDER = os.getenv("EMAIL_SENDER")
-          EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
-          EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
+          TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+          TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
           FOREX_PAIRS = {
               "EURUSD=X": 0.0001, "GBPUSD=X": 0.0001, "USDJPY=X": 0.01, "AUDUSD=X": 0.0001,
@@ -54,23 +50,22 @@ jobs:
               "CADJPY=X": 0.01, "CHFJPY=X": 0.01, "AUDCAD=X": 0.0001, "AUDNZD=X": 0.0001
           }
 
-          def send_email(subject, body):
+          def send_telegram_message(message):
+              """Sendet das Signal in Millisekunden direkt auf dein Telegram-Handy"""
               try:
-                  msg = MIMEText(body)
-                  msg['Subject'] = subject
-                  msg['From'] = EMAIL_SENDER
-                  msg['To'] = EMAIL_RECEIVER
-                  with smtplib.SMTP_SSL('://gmail.com', 465, timeout=10) as server:
-                      server.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
-                      server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-                  print("-> Info: Testsignal über SMTP gesendet!")
-              except Exception:
-                  try:
-                      print("-> Info: SMTP blockiert. Nutze offenes HTTP-Web-Gateway als Fallback...")
-                      print(f"📦 SIGNAL-EMPFÄNGER: {EMAIL_RECEIVER}")
-                      print(f"📦 SIGNAL-INHALT BEREITSTEHEND:\n{body[:150]}...")
-                  except Exception as e:
-                      print(f"-> Lokaler Gateway-Fehler: {e}")
+                  url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
+                  payload = {
+                      "chat_id": TELEGRAM_CHAT_ID,
+                      "text": message,
+                      "parse_mode": "Markdown"
+                  }
+                  response = requests.post(url, json=payload, timeout=10)
+                  if response.status_code == 200:
+                      print("-> Info: Signal erfolgreich an Telegram gepusht!")
+                  else:
+                      print(f"-> Telegram API Fehler: {response.text}")
+              except Exception as e:
+                  print(f"-> Allgemeiner Telegram Fehler: {e}")
 
           def get_market_news(pair):
               clean_pair = pair.replace("=X", "")
@@ -115,7 +110,8 @@ jobs:
                   return "neutral", 0.0
               except Exception: return "neutral", 0.0
 
-          print("=== START DES ULTRA-HOCHFREQUENTEN 5M SCANNERs ===")
+          print("=== START DES AUTOMATISIERTEN TELEGRAM-TESTS ===")
+          print("🤖 AGENT_ORCHESTRATOR: Verbinde KIs mit deinem Telegram...")
           
           for pair, pip_val in FOREX_PAIRS.items():
               clean_name = pair.replace("=X", "")
@@ -139,16 +135,28 @@ jobs:
               if trend == "VOLUME_LONG":
                   sl = live_price - sl_pips
                   tp = live_price + tp_pips
-                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (LONG) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nSystem arbeitet im Netz fehlerfrei!"
-                  print(f"🚨 Volltreffer bei {clean_name}! Sende Daten...")
-                  send_email(f"🚀 TEST-SIGNAL: {clean_name[:3]}/{clean_name[3:]} LONG", txt)
+                  txt = f"🚀 *TELEGRAM-TEST: SETUP (LONG)* 🚀\n\n" \
+                        f"• *Währungspaar:* {clean_name[:3]}/{clean_name[3:]}\n\n" \
+                        f"🎯 *ENTRY:* `{live_price:{fmt}}`\n" \
+                        f"🛑 *STOP-LOSS:* `{sl:{fmt}}`\n" \
+                        f"🏁 *TAKE-PROFIT:* `{tp:{fmt}}`\n\n" \
+                        f"Stimmungsscore: {total_score:.2f}\n" \
+                        f"Die Brücke zu Telegram läuft absolut brutal!"
+                  print(f"🚨 Volltreffer bei {clean_name}! Schieße Nachricht an Telegram...")
+                  send_telegram_message(txt)
                   
               elif trend == "VOLUME_SHORT":
                   sl = live_price + sl_pips
                   tp = live_price - tp_pips
-                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (SHORT) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nSystem arbeitet im Netz fehlerfrei!"
-                  print(f"🚨 Volltreffer bei {clean_name}! Sende Daten...")
-                  send_email(f"⚠️ TEST-SIGNAL: {clean_name[:3]}/{clean_name[3:]} SHORT", txt)
+                  txt = f"⚠️ *TELEGRAM-TEST: SETUP (SHORT)* ⚠️\n\n" \
+                        f"• *Währungspaar:* {clean_name[:3]}/{clean_name[3:]}\n\n" \
+                        f"🎯 *ENTRY:* `{live_price:{fmt}}`\n" \
+                        f"🛑 *STOP-LOSS:* `{sl:{fmt}}`\n" \
+                        f"🏁 *TAKE-PROFIT:* `{tp:{fmt}}`\n\n" \
+                        f"Stimmungsscore: {total_score:.2f}\n" \
+                        f"Die Brücke zu Telegram läuft absolut brutal!"
+                  print(f"🚨 Volltreffer bei {clean_name}! Schieße Nachricht an Telegram...")
+                  send_telegram_message(txt)
                   
           print("=== SCAN BEENDET ===")
           EOF
