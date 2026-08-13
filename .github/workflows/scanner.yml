@@ -75,12 +75,15 @@ jobs:
           def get_historical_data(pair):
               try:
                   ticker = yf.Ticker(pair)
-                  # TEST-INTERVALL: Schaltet auf hochfrequenten 5-Minuten-Chart um!
-                  df = ticker.history(interval="5m", period="1d")
-                  if df.empty: return None
+                  # BRANDNEU UMWANDELT: 5 Tage Historie sichert lückenlose 5-Minuten-Daten!
+                  df = ticker.history(interval="5m", period="5d")
+                  if df is None or df.empty: 
+                      return None
                   df.columns = [c.lower() for c in df.columns]
                   return df.tail(40).reset_index(drop=True)
-              except Exception: return None
+              except Exception as e:
+                  print(f"   ⚠️ API-Fehler bei {pair}: {e}")
+                  return None
 
           def analyze_brutal_smc(df):
               if df is None or len(df) < 15: return "neutral", 0.0, 0.0
@@ -89,7 +92,6 @@ jobs:
               current_low = df.loc[last_idx, 'low']
               current_high = df.loc[last_idx, 'high']
               
-              # Schnellerer Lookback (10 Kerzen) für häufigere Signale auf M5
               lookback_df = df.iloc[last_idx-11 : last_idx-1]
               highest_high_10 = lookback_df['high'].max()
               lowest_low_10 = lookback_df['low'].min()
@@ -100,7 +102,7 @@ jobs:
                           if df.loc[i, 'close'] < df.loc[i, 'open']:
                               return "BRUTAL_SMC_LONG", df.loc[i, 'low'], current_close
               
-              if current_high > highest_high_10 and current_close < highest_high_10:
+              if current_high > highest_high_10 and current_close < highest_high_20 if 'highest_high_20' in locals() else current_high > highest_high_10 and current_close < highest_high_10:
                   if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
                       for i in range(last_idx-1, 0, -1):
                           if df.loc[i, 'close'] > df.loc[i, 'open']:
@@ -119,15 +121,23 @@ jobs:
               except Exception: return "neutral", 0.0
 
           print("=== START DES HOCHFREQUENTEN 5M TEST-SCANNERs ===")
+          print("🤖 AGENT_ORCHESTRATOR (CEO): Starte 5M Multi-Paar Analyse...")
           
           for pair, pip_val in FOREX_PAIRS.items():
               clean_name = pair.replace("=X", "")
+              print(f"\n🔄 Scanne: {clean_name[:3]}/{clean_name[3:]}")
+              
               df = get_historical_data(pair)
-              if df is None: continue
+              if df is None: 
+                  print(f"   📊 AGENT_QUANT: Konnte Chartdaten nicht laden.")
+                  continue
               
               smc_trend, ob_level, live_price = analyze_brutal_smc(df)
-              if smc_trend == "neutral": continue
+              if smc_trend == "neutral": 
+                  print(f"   📊 AGENT_QUANT: Keine 5M SMC-Struktur aktiv. Standby.")
+                  continue
               
+              print(f"🚨 BRUTALES 5M SETUP DETEKTIERT BEI: {clean_name[:3]}/{clean_name[3:]} 🚨")
               headlines = get_market_news(pair)
               total_score = 0
               for title in headlines:
@@ -142,7 +152,7 @@ jobs:
 
               fmt = ".3f" if "JPY" in pair else ".5f"
               
-              if smc_trend == "BRUTAL_SMC_LONG" and total_score >= -0.4: # Filter leicht gelockert für den Testlauf
+              if smc_trend == "BRUTAL_SMC_LONG" and total_score >= -0.4:
                   sl = ob_level - (3 * pip_val)
                   tp = live_price + (15 * pip_val)
                   
@@ -152,7 +162,8 @@ jobs:
                         f"🎯 ENTRY: {live_price:{fmt}}\n" \
                         f"🛑 SL: {sl:{fmt}}\n" \
                         f"🏁 TP: {tp:{fmt}}\n\n" \
-                        f"Test-Meldung: Der 5M-Chart hat angeschlagen!"
+                        f"Test-Meldung: Der 5M-Chart hat angeschlagen! Sentiment: {total_score:.2f}"
+                  print(f"   -> CEO: Signal an E-Mail übergeben!")
                   send_email(f"⚡ 5M-TEST: {clean_name[:3]}/{clean_name[3:]} LONG!", txt)
                   
               elif smc_trend == "BRUTAL_SMC_SHORT" and total_score <= 0.4:
@@ -165,9 +176,10 @@ jobs:
                         f"🎯 ENTRY: {live_price:{fmt}}\n" \
                         f"🛑 SL: {sl:{fmt}}\n" \
                         f"🏁 TP: {tp:{fmt}}\n\n" \
-                        f"Test-Meldung: Der 5M-Chart hat angeschlagen!"
+                        f"Test-Meldung: Der 5M-Chart hat angeschlagen! Sentiment: {total_score:.2f}"
+                  print(f"   -> CEO: Signal an E-Mail übergeben!")
                   send_email(f"⚡ 5M-TEST: {clean_name[:3]}/{clean_name[3:]} SHORT!", txt)
                   
-          print("=== TEST-SCAN BEENDET ===")
+          print("\n=== TEST-SCAN BEENDET ===")
           EOF
           python inline_script.py
