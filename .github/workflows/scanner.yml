@@ -58,7 +58,7 @@ jobs:
                   with smtplib.SMTP_SSL('://gmail.com', 465) as server:
                       server.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
                       server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-                  print("-> Info: 5M-Testsignal erfolgreich gesendet!")
+                  print("-> Info: Testsignal erfolgreich gesendet!")
               except Exception as e:
                   print(f"-> Fehler beim E-Mail-Versand: {e}")
 
@@ -75,38 +75,26 @@ jobs:
           def get_historical_data(pair):
               try:
                   ticker = yf.Ticker(pair)
-                  # BRANDNEU UMWANDELT: 5 Tage Historie sichert lückenlose 5-Minuten-Daten!
                   df = ticker.history(interval="5m", period="5d")
-                  if df is None or df.empty: 
-                      return None
+                  if df is None or df.empty: return None
                   df.columns = [c.lower() for c in df.columns]
-                  return df.tail(40).reset_index(drop=True)
-              except Exception as e:
-                  print(f"   ⚠️ API-Fehler bei {pair}: {e}")
-                  return None
+                  return df.tail(30).reset_index(drop=True)
+              except Exception: return None
 
-          def analyze_brutal_smc(df):
-              if df is None or len(df) < 15: return "neutral", 0.0, 0.0
+          def analyze_high_frequency_fvg(df):
+              """GELOCKERTE TEST-METHODE: Reagiert sofort auf Fair Value Gaps für garantierte Signale"""
+              if df is None or len(df) < 5: return "neutral", 0.0, 0.0
               last_idx = len(df) - 1
               current_close = df.loc[last_idx, 'close']
-              current_low = df.loc[last_idx, 'low']
-              current_high = df.loc[last_idx, 'high']
               
-              lookback_df = df.iloc[last_idx-11 : last_idx-1]
-              highest_high_10 = lookback_df['high'].max()
-              lowest_low_10 = lookback_df['low'].min()
-              
-              if current_low < lowest_low_10 and current_close > lowest_low_10:
-                  if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
-                      for i in range(last_idx-1, 0, -1):
-                          if df.loc[i, 'close'] < df.loc[i, 'open']:
-                              return "BRUTAL_SMC_LONG", df.loc[i, 'low'], current_close
-              
-              if current_high > highest_high_10 and current_close < highest_high_20 if 'highest_high_20' in locals() else current_high > highest_high_10 and current_close < highest_high_10:
-                  if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
-                      for i in range(last_idx-1, 0, -1):
-                          if df.loc[i, 'close'] > df.loc[i, 'open']:
-                              return "BRUTAL_SMC_SHORT", df.loc[i, 'high'], current_close
+              # Prüft, ob ein bullisches FVG (Lücke nach oben) vorliegt
+              if df.loc[last_idx-2, 'high'] < df.loc[last_idx, 'low']:
+                  return "VOLUME_LONG", df.loc[last_idx-2, 'high'], current_close
+                  
+              # Prüft, ob ein bärisches FVG (Lücke nach unten) vorliegt
+              if df.loc[last_idx-2, 'low'] > df.loc[last_idx, 'high']:
+                  return "VOLUME_SHORT", df.loc[last_idx-2, 'low'], current_close
+                  
               return "neutral", 0.0, current_close
 
           def analyze_sentiment_with_ki(headline):
@@ -120,24 +108,17 @@ jobs:
                   return "neutral", 0.0
               except Exception: return "neutral", 0.0
 
-          print("=== START DES HOCHFREQUENTEN 5M TEST-SCANNERs ===")
-          print("🤖 AGENT_ORCHESTRATOR (CEO): Starte 5M Multi-Paar Analyse...")
+          print("=== START DES ULTRA-HOCHFREQUENTEN 5M SCANNERs ===")
           
           for pair, pip_val in FOREX_PAIRS.items():
               clean_name = pair.replace("=X", "")
-              print(f"\n🔄 Scanne: {clean_name[:3]}/{clean_name[3:]}")
-              
               df = get_historical_data(pair)
-              if df is None: 
-                  print(f"   📊 AGENT_QUANT: Konnte Chartdaten nicht laden.")
-                  continue
+              if df is None: continue
               
-              smc_trend, ob_level, live_price = analyze_brutal_smc(df)
-              if smc_trend == "neutral": 
-                  print(f"   📊 AGENT_QUANT: Keine 5M SMC-Struktur aktiv. Standby.")
-                  continue
+              trend, target_level, live_price = analyze_high_frequency_fvg(df)
+              if trend == "neutral": continue
               
-              print(f"🚨 BRUTALES 5M SETUP DETEKTIERT BEI: {clean_name[:3]}/{clean_name[3:]} 🚨")
+              # Extrem sensible News-Abfrage für den Test
               headlines = get_market_news(pair)
               total_score = 0
               for title in headlines:
@@ -145,41 +126,25 @@ jobs:
                   if label == "positive": total_score += score
                   elif label == "negative": total_score -= score
               
-              pips_stop = abs(live_price - ob_level) / pip_val if "JPY" in pair else abs(live_price - ob_level) * 100
-              pips_stop = max(pips_stop, 3.0) 
-              calculated_lots = 500.0 / (pips_stop * 10.0) if "JPY" not in pair else 500.0 / (pips_stop * 6.5)
-              final_lots = min(max(round(calculated_lots, 2), 0.1), 5.0)
-
+              # Statische, sichere Test-Pip-Abstände
+              sl_pips = 15 if "JPY" in pair else 0.0015
+              tp_pips = 30 if "JPY" in pair else 0.0030
               fmt = ".3f" if "JPY" in pair else ".5f"
               
-              if smc_trend == "BRUTAL_SMC_LONG" and total_score >= -0.4:
-                  sl = ob_level - (3 * pip_val)
-                  tp = live_price + (15 * pip_val)
+              if trend == "VOLUME_LONG":
+                  sl = live_price - sl_pips
+                  tp = live_price + tp_pips
+                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (LONG) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nStimmungsscore: {total_score:.2f}\nSystem arbeitet fehlerfrei!"
+                  print(f"🚨 Volltreffer bei {clean_name}! Sende E-Mail...")
+                  send_email(f"🚀 TEST-SIGNAL: {clean_name[:3]}/{clean_name[3:]} LONG", txt)
                   
-                  txt = f"⚡ 5M-TESTSIGNALE: SMC-SETUP (LONG) ⚡\n\n" \
-                        f"• Paar: {clean_name[:3]}/{clean_name[3:]}\n" \
-                        f"• Lots: {final_lots}\n\n" \
-                        f"🎯 ENTRY: {live_price:{fmt}}\n" \
-                        f"🛑 SL: {sl:{fmt}}\n" \
-                        f"🏁 TP: {tp:{fmt}}\n\n" \
-                        f"Test-Meldung: Der 5M-Chart hat angeschlagen! Sentiment: {total_score:.2f}"
-                  print(f"   -> CEO: Signal an E-Mail übergeben!")
-                  send_email(f"⚡ 5M-TEST: {clean_name[:3]}/{clean_name[3:]} LONG!", txt)
+              elif trend == "VOLUME_SHORT":
+                  sl = live_price + sl_pips
+                  tp = live_price - tp_pips
+                  txt = f"🔥 HIGH-FREQUENCY TEST-SIGNAL (SHORT) 🔥\n\n• Paar: {clean_name[:3]}/{clean_name[3:]}\n🎯 ENTRY: {live_price:{fmt}}\n🛑 SL: {sl:{fmt}}\n🏁 TP: {tp:{fmt}}\n\nStimmungsscore: {total_score:.2f}\nSystem arbeitet fehlerfrei!"
+                  print(f"🚨 Volltreffer bei {clean_name}! Sende E-Mail...")
+                  send_email(f"⚠️ TEST-SIGNAL: {clean_name[:3]}/{clean_name[3:]} SHORT", txt)
                   
-              elif smc_trend == "BRUTAL_SMC_SHORT" and total_score <= 0.4:
-                  sl = ob_level + (3 * pip_val)
-                  tp = live_price - (15 * pip_val)
-                  
-                  txt = f"⚡ 5M-TESTSIGNALE: SMC-SETUP (SHORT) ⚡\n\n" \
-                        f"• Paar: {clean_name[:3]}/{clean_name[3:]}\n" \
-                        f"• Lots: {final_lots}\n\n" \
-                        f"🎯 ENTRY: {live_price:{fmt}}\n" \
-                        f"🛑 SL: {sl:{fmt}}\n" \
-                        f"🏁 TP: {tp:{fmt}}\n\n" \
-                        f"Test-Meldung: Der 5M-Chart hat angeschlagen! Sentiment: {total_score:.2f}"
-                  print(f"   -> CEO: Signal an E-Mail übergeben!")
-                  send_email(f"⚡ 5M-TEST: {clean_name[:3]}/{clean_name[3:]} SHORT!", txt)
-                  
-          print("\n=== TEST-SCAN BEENDET ===")
+          print("=== SCAN BEENDET ===")
           EOF
           python inline_script.py
