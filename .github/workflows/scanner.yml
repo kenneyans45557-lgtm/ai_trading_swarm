@@ -51,13 +51,12 @@ jobs:
           }
 
           def send_telegram_message(message):
-              """Sendet das Signal in Millisekunden direkt auf dein Telegram-Handy"""
               try:
                   url = f"https://telegram.org{TELEGRAM_BOT_TOKEN}/sendMessage"
                   payload = {
                       "chat_id": TELEGRAM_CHAT_ID,
                       "text": message,
-                      "parse_mode": "Markdown"
+                      "parse_mode": "HTML"  # REPARIERT: HTML stürzt bei Schrägstrichen niemals ab!
                   }
                   response = requests.post(url, json=payload, timeout=10)
                   if response.status_code == 200:
@@ -132,14 +131,15 @@ jobs:
               tp_pips = 30 if "JPY" in pair else 0.0030
               fmt = ".3f" if "JPY" in pair else ".5f"
               
+              # REPARIERT: Saubere HTML-Tags statt kaputtem Markdown
               if trend == "VOLUME_LONG":
                   sl = live_price - sl_pips
                   tp = live_price + tp_pips
-                  txt = f"🚀 *TELEGRAM-TEST: SETUP (LONG)* 🚀\n\n" \
-                        f"• *Währungspaar:* {clean_name[:3]}/{clean_name[3:]}\n\n" \
-                        f"🎯 *ENTRY:* `{live_price:{fmt}}`\n" \
-                        f"🛑 *STOP-LOSS:* `{sl:{fmt}}`\n" \
-                        f"🏁 *TAKE-PROFIT:* `{tp:{fmt}}`\n\n" \
+                  txt = f"🚀 <b>TELEGRAM-TEST: SETUP (LONG)</b> 🚀\n\n" \
+                        f"• <b>Währungspaar:</b> {clean_name[:3]}/{clean_name[3:]}\n\n" \
+                        f"🎯 <b>ENTRY:</b> <code>{live_price:{fmt}}</code>\n" \
+                        f"🛑 <b>STOP-LOSS:</b> <code>{sl:{fmt}}</code>\n" \
+                        f"🏁 <b>TAKE-PROFIT:</b> <code>{tp:{fmt}}</code>\n\n" \
                         f"Stimmungsscore: {total_score:.2f}\n" \
                         f"Die Brücke zu Telegram läuft absolut brutal!"
                   print(f"🚨 Volltreffer bei {clean_name}! Schieße Nachricht an Telegram...")
@@ -148,14 +148,14 @@ jobs:
               elif trend == "VOLUME_SHORT":
                   sl = live_price + sl_pips
                   tp = live_price - tp_pips
-                  txt = f"⚠️ *TELEGRAM-TEST: SETUP (SHORT)* ⚠️\n\n" \
-                        f"• *Währungspaar:* {clean_name[:3]}/{clean_name[3:]}\n\n" \
-                        f"🎯 *ENTRY:* `{live_price:{fmt}}`\n" \
-                        f"🛑 *STOP-LOSS:* `{sl:{fmt}}`\n" \
-                        f"🏁 *TAKE-PROFIT:* `{tp:{fmt}}`\n\n" \
+                  txt = f"⚠️ <b>TELEGRAM-TEST: SETUP (SHORT)</b> ⚠️\n\n" \
+                        f"• <b>Währungspaar:</b> {clean_name[:3]}/{clean_name[3:]}\n\n" \
+                        f"🎯 <b>ENTRY:</b> <code>{live_price:{fmt}}</code>\n" \
+                        f"🛑 <b>STOP-LOSS:</b> <code>{sl:{fmt}}</code>\n" \
+                        f"🏁 <b>TAKE-PROFIT:</b> <code>{tp:{fmt}}</code>\n\n" \
                         f"Stimmungsscore: {total_score:.2f}\n" \
                         f"Die Brücke zu Telegram läuft absolut brutal!"
-                  print(f"🚨 Volltreffer bei {clean_name}! Schieße Nachricht an Telegram...")
+                  print(f"🚨 Volltreffer bei {clean_name}! Sende Nachricht an Telegram...")
                   send_telegram_message(txt)
                   
           print("=== SCAN BEENDET ===")
