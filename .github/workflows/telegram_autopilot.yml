@@ -26,7 +26,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pyTelegramBotAPI tradingview_ta pandas numpy
 
-      - name: UNZERSTÖRBARES H1 TRADINGVIEW SMC SYSTEM
+      - name: UNZERSTÖRBARER H1 TRADINGVIEW SMC SYSTEM
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -45,11 +45,11 @@ jobs:
 
           print("=== STARTE PREMIUM TRADINGVIEW SCAN (H1) ===")
 
-          # HIER DER FIX: ICE für Gold und FX_IDC für die Währungen (Absolut stabil!)
+          # HIER DER ENTSCHEIDENDE PROFI-FIX FOR TRADINGVIEW CODES:
           PAIRS = [
-              {"symbol": "XAUUSD", "screener": "forex", "exchange": "ICE", "name": "GOLD (XAUUSD)"},
-              {"symbol": "EURUSD", "screener": "forex", "exchange": "FX_IDC", "name": "EURUSD"},
-              {"symbol": "GBPCAD", "screener": "forex", "exchange": "FX_IDC", "name": "GBPCAD"}
+              {"symbol": "XAUUSD", "screener": "forex", "exchange": "FX_IDC", "name": "GOLD (XAUUSD)"},
+              {"symbol": "EURUSD", "screener": "forex", "exchange": "OANDA", "name": "EURUSD"},
+              {"symbol": "GBPCAD", "screener": "forex", "exchange": "OANDA", "name": "GBPCAD"}
           ]
 
           for pair in PAIRS:
