@@ -24,7 +24,6 @@ jobs:
       - name: TradingView-Pakete installieren
         run: |
           python -m pip install --upgrade pip
-          # Wir installieren das offizielle TradingView-Gehirn!
           pip install requests pyTelegramBotAPI tradingview_ta pandas numpy
 
       - name: UNZERSTÖRBARES H1 TRADINGVIEW SMC SYSTEM
@@ -34,7 +33,7 @@ jobs:
         run: |
           cat << 'EOF' > tv_beast.py
           import os, telebot
-          from tradingview_ta import TA_Handler, Interval, Exchange
+          from tradingview_ta import TA_Handler, Interval
 
           BOT_TOKEN = str(os.getenv("TELEGRAM_BOT_TOKEN")).strip()
           CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID")).strip()
@@ -46,16 +45,15 @@ jobs:
 
           print("=== STARTE PREMIUM TRADINGVIEW SCAN (H1) ===")
 
-          # Exakte Ticker und Marktplätze direkt von TradingView geladen!
+          # HIER DER FIX: ICE für Gold und FX_IDC für die Währungen (Absolut stabil!)
           PAIRS = [
-              {"symbol": "XAUUSD", "screener": "forex", "exchange": "OANDA", "name": "GOLD (XAUUSD)"},
+              {"symbol": "XAUUSD", "screener": "forex", "exchange": "ICE", "name": "GOLD (XAUUSD)"},
               {"symbol": "EURUSD", "screener": "forex", "exchange": "FX_IDC", "name": "EURUSD"},
-              {"symbol": "GBPCAD", "screener": "forex", "exchange": "OANDA", "name": "GBPCAD"}
+              {"symbol": "GBPCAD", "screener": "forex", "exchange": "FX_IDC", "name": "GBPCAD"}
           ]
 
           for pair in PAIRS:
               try:
-                  # Verbindung zu den TradingView-Servern aufbauen
                   handler = TA_Handler(
                       symbol=pair["symbol"],
                       screener=pair["screener"],
@@ -63,24 +61,21 @@ jobs:
                       interval=Interval.INTERVAL_1_HOUR
                   )
                   
-                  # Live-Analyse abrufen
                   analysis = handler.get_analysis()
                   current_price = analysis.indicators["close"]
                   rsi = analysis.indicators["RSI"]
                   
-                  # SMC-Struktur aus den gleitenden Durchschnitten und Oszillatoren von TradingView ableiten
                   summary = analysis.summary
                   recommendation = summary.get("RECOMMENDATION", "NEUTRAL")
                   
                   signal_found = False
                   fmt = ".2f" if "XAUUSD" in pair["symbol"] else ".5f"
                   
-                  # 1. BULLISCH DETEKTION (TradingView sagt starker Kaufbereich)
+                  # 1. BULLISCH DETEKTION
                   if "BUY" in recommendation:
                       entry = current_price
-                      # Pro-Berechnung: Enger SL simuliert unter dem letzten EMA/Orderblock
                       sl = entry - (entry * 0.0015)
-                      tp = entry + (entry - sl) * 2.5 # CRV 1:2.5
+                      tp = entry + (entry - sl) * 2.5
                       
                       order_type = "⏳ PENDING ORDER (BUY LIMIT)"
                       
@@ -97,7 +92,7 @@ jobs:
                       bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
                       signal_found = True
 
-                  # 2. BÄRISCH DETEKTION (TradingView sagt starker Verkaufbereich)
+                  # 2. BÄRISCH DETEKTION
                   elif "SELL" in recommendation:
                       entry = current_price
                       sl = entry + (entry * 0.0015)
@@ -118,7 +113,7 @@ jobs:
                       bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
                       signal_found = True
 
-                  # LIVE STATUS BERICHT WENN DER MARKT SEITWÄRTS LÄUFT
+                  # LIVE STATUS BERICHT
                   if not signal_found:
                       status_msg = (
                           f"🔍 **TRADINGVIEW MARKT-INFO (H1)** 🔍\n\n"
