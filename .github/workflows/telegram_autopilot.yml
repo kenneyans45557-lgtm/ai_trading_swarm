@@ -45,11 +45,11 @@ jobs:
 
           print("=== STARTE PREMIUM TRADINGVIEW SCAN (H1) ===")
 
-          # HIER DER ENTSCHEIDENDE PROFI-FIX FOR TRADINGVIEW CODES:
+          # HIER IST DER ENTSCHEIDENDE FIX: Gold läuft auf 'cfd' via 'TVC'!
           PAIRS = [
-              {"symbol": "XAUUSD", "screener": "forex", "exchange": "FX_IDC", "name": "GOLD (XAUUSD)"},
-              {"symbol": "EURUSD", "screener": "forex", "exchange": "OANDA", "name": "EURUSD"},
-              {"symbol": "GBPCAD", "screener": "forex", "exchange": "OANDA", "name": "GBPCAD"}
+              {"symbol": "XAUUSD", "screener": "cfd", "exchange": "TVC", "name": "GOLD (XAUUSD)"},
+              {"symbol": "EURUSD", "screener": "forex", "exchange": "FX_IDC", "name": "EURUSD"},
+              {"symbol": "GBPCAD", "screener": "forex", "exchange": "FX_IDC", "name": "GBPCAD"}
           ]
 
           for pair in PAIRS:
@@ -113,7 +113,7 @@ jobs:
                       bot.send_message(CHAT_ID, msg, parse_mode="Markdown")
                       signal_found = True
 
-                  # LIVE STATUS BERICHT
+                  # LIVE STATUS BERICHT WENN DER MARKT SEITWÄRTS LÄUFT
                   if not signal_found:
                       status_msg = (
                           f"🔍 **TRADINGVIEW MARKT-INFO (H1)** 🔍\n\n"
