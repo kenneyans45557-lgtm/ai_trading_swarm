@@ -2,7 +2,7 @@ name: AI Trading Swarm Autopilot
 
 on:
   schedule:
-    - cron: '0 * * * *' # Läuft vollautomatisch jede Stunde von alleine!
+    - cron: '0 * * * *' # Der Autopilot läuft pünktlich jede Stunde von alleine!
   workflow_dispatch: # Manueller Button als Backup
 
 permissions:
@@ -46,9 +46,9 @@ jobs:
 
           print("=== STARTE STRIGENTEN SMC-SCAN (H1) ===")
 
-          # HIER DER FIX: XAUUSD=X statt GC=F für den exakten Forex-Goldpreis!
+          # GC=F ist wieder drin – durch den schnellen Lauf jetzt immer brandaktuell!
           PAIRS = {
-              "XAUUSD=X": "GOLD (XAUUSD)",
+              "GC=F": "GOLD (XAUUSD)",
               "EURUSD=X": "EURUSD",
               "GBPCAD=X": "GBPCAD"
           }
@@ -84,7 +84,7 @@ jobs:
                   recent_low = lows_df.iloc[-1][low_col]
                   
                   signal_found = False
-                  fmt = ".2f" if "XAUUSD" in pair else ".5f"
+                  fmt = ".2f" if "GC=F" in pair else ".5f"
                   
                   # 1. BULLISCH DETEKTION
                   if current_price > df.iloc[last_idx-3][close_col]:
@@ -96,8 +96,6 @@ jobs:
                               if ob_low <= current_price <= (ob_high + (ob_high - ob_low)*0.5):
                                   entry = current_price
                                   sl = ob_low - (ob_low * 0.0005)
-                                  
-                                  # MATHEMATISCHER FIX: TP muss über dem Entry liegen bei LONG!
                                   tp = recent_high if recent_high > entry else entry + (entry - sl) * 2.0
                                   
                                   order_type = "⚡ MARKET EXECUTION" if abs(current_price - entry) < (entry * 0.0005) else "⏳ PENDING ORDER (BUY LIMIT)"
@@ -127,8 +125,6 @@ jobs:
                               if (ob_low - (ob_high - ob_low)*0.5) <= current_price <= ob_high:
                                   entry = current_price
                                   sl = ob_high + (ob_high * 0.0005)
-                                  
-                                  # MATHEMATISCHER FIX: TP muss unter dem Entry liegen bei SHORT!
                                   tp = recent_low if recent_low < entry else entry - (sl - entry) * 2.0
                                   
                                   order_type = "⚡ MARKET EXECUTION" if abs(current_price - entry) < (entry * 0.0005) else "⏳ PENDING ORDER (SELL LIMIT)"
